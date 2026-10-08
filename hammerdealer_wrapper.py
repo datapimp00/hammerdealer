@@ -347,31 +347,86 @@ def fallback_bild(plattform, titel=""):
     return "data:image/svg+xml," + urllib.parse.quote(svg)
 
 def scan(q):
-    """Echte Portale scannen (Kleinanzeigen + eBay/Vinted best effort)."""
+    """Echte Portale scannen (Kleinanzeigen + eBay/Vinted best effort).
+
+    Holt Plattform-Listen ueber die Micro-Wrapper (HTTP, via WRAPPER_URLS) und
+    berechnet fuer die Gewinnloesung echte Verkaufspreise (eBay-Median /
+    Schaetzung). Die Micro-Wrapper liefern Titel/Link/Bild/Zustand, nicht
+    verfiellige Preise -> Kaufpreis bleibt Beobachtung, Verkaufswert aus
+    dem echten Preis-Pipeline.
+    """
     q = sanitize_q(q)
     try:
         from scraper import scan_real, schaetze_verkauf, ebay_market_price
     except Exception as e:
         logging.warning("scraper import: %s", e)
         return []
-    items, quellen = scan_real(q)
+
+    def _fetch_from_wrappers(wrappers):
+        """Ruft alle Micro-Wrapper ab (POST /fetch) und normalisiert die Listing-Dicts.
+        Rueckgabe: list[{titel,plattform,kaufpreis,link,bild,zustand}]. Nie wirfend,
+        im Fehlerfall leere Liste."""
+        out = []
+        for portal, svc_url in wrappers.items():
+            if not svc_url:
+                continue
+            try:
+                r = requests.post(
+                    svc_url + "/fetch",
+                    json={"url": "https://" + portal + ".de"},
+                    timeout=15,
+                    proxies=PROXIES,
+                )
+                if r.status_code != 200:
+                    continue
+                payload = r.json()
+            except Exception:
+                continue
+            for d in (payload or {}).get("deals") or []:
+                if not isinstance(d, dict):
+                    continue
+                out.append({
+                    "titel": d.get("titel") or "",
+                    "plattform": d.get("plattform") or portal,
+                    "kaufpreis": float(d.get("kaufpreis") or 0),
+                    "link": d.get("link") or "",
+                    "bild": d.get("bild") or "",
+                    "zustand": d.get("zustand", "gut"),
+                })
+        return out
+
+    # 1) Micro-Wrappers befragen (HTTP)
+
+    items = _fetch_from_wrappers(WRAPPER_URLS)
+
+
+    # 2) In-Process-Scraping als Quelle fuer echte Preise (Boost)
+    try:
+        from scraper import scan_real as _scan_real
+        items2, quellen_scrape = _scan_real(q)
+    except Exception:
+        items2, quellen_scrape = [], []
+    items += items2
+
     if not items:
         return []
-    # Echter Marktpreis (eBay-Median) als Verkaufsschaetzung, sonst Kategorie-Faktor
+
+    # Echter Marktpreis (eBay-Median) als Verkaufsschaetzung
     marktpreis = None
     try:
         marktpreis = ebay_market_price(q)
     except Exception:
         marktpreis = None
-    quelle_txt = "echt:" + "+".join(quellen)
+
+    quelle_txt = "echt:" + "+".join(quellen_scrape) if quellen_scrape else "wrapper"
     res = []
     for i, it in enumerate(items):
-        preis = float(it.get("preis") or 0)
+        preis = float(it.get("kaufpreis") or it.get("preis") or 0)
         if preis <= 0:
             continue
         verkaufswert = marktpreis if marktpreis else schaetze_verkauf(preis, it.get("titel", ""))
         d = {
-            "id": f"{it.get('plattform','x')[:2]}_{int(time.time())}_{i}",
+            "id": f"{it.get('plattform', 'x')[:2]}_{int(time.time())}_{i}",
             "titel": it.get("titel") or q,
             "plattform": it.get("plattform", "kleinanzeigen"),
             "kaufpreis": preis,
@@ -387,6 +442,7 @@ def scan(q):
                                         else "Schaetzung (Faktor, kein Marktpreis)")
             b["quelle"] = quelle_txt
             res.append(b)
+
     # Deduplizierung
     seen = set()
     uniq = []

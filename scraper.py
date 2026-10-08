@@ -1,5 +1,5 @@
 """Echtes Scraping fuer HAMMERDEALER: Kleinanzeigen (Hauptquelle), eBay + Vinted best effort."""
-import os, re, json, random, logging
+import os, re, json, random, logging, time
 import requests
 from bs4 import BeautifulSoup
 
@@ -416,6 +416,11 @@ def scan_real(q):
 # ---------- eBay Browse API (offiziell, kostenlos) ----------
 _EBAY_TOKEN = {"token": None, "exp": 0}
 
+def _ebay_base() -> str:
+    """Hostname der eBay-API (Produktion oder Sandbox)."""
+    env = os.environ.get("EBAY_ENV", "").strip().lower()
+    sandbox = env in ("sandbox", "test", "dev") or "SBX" in os.environ.get("EBAY_APP_ID", "").upper()
+    return "api.sandbox.ebay.com" if sandbox else "api.ebay.com"
 def _ebay_creds():
     app = os.environ.get("EBAY_APP_ID", "").strip()
     cert = os.environ.get("EBAY_CERT_ID", "").strip()
@@ -432,7 +437,7 @@ def ebay_token():
         import base64
         cred = base64.b64encode((app + ":" + cert).encode()).decode()
         r = requests.post(
-            "https://api.ebay.com/identity/v1/oauth2/token",
+            "https://" + _ebay_base() + "/identity/v1/oauth2/token",
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Authorization": "Basic " + cred,
@@ -458,7 +463,7 @@ def ebay_browse(q, limit=30):
         return []
     try:
         r = requests.get(
-            "https://api.ebay.com/buy/browse/v1/item_summary/search",
+            "https://" + _ebay_base() + "/buy/browse/v1/item_summary/search",
             headers={"Authorization": "Bearer " + token},
             params={"q": q, "limit": limit, "fieldgroups": "EXTENDED"},
             timeout=15,

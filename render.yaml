@@ -12,5 +12,11 @@ services:
         sync: false
       - key: MIN_PROFIT
         value: 50
+      - key: EBAY_APP_ID
+        sync: false
+      - key: EBAY_CERT_ID
+        sync: false
+      - key: EBAY_ENV
+        value: sandbox
     healthCheckPath: /api/health
 
