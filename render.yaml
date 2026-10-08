@@ -21,5 +21,4 @@ services:
       - key: EBAY_ENV
         value: production
     healthCheckPath: /api/health
-    healthCheckPath: /api/health
 
