@@ -398,7 +398,6 @@ def portale():
     return [
         ("kleinanzeigen", kleinanzeigen),
         ("ebay", ebay_browse),
-        ("vinted", vinted),
     ]
 
 def scan_real(q):
