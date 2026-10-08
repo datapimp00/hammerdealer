@@ -87,51 +87,60 @@ def schaetze_verkauf(kauf, titel):
         f = 1.5
     return round(kauf * f, 2)
 
-def kleinanzeigen(q, limit=25):
-    """Echte Kleinanzeigen-Suche. Liefert [] wenn Portal nicht erreichbar."""
+def kleinanzeigen(q, limit=75, pages=3):
+    """Echte Kleinanzeigen-Suche ueber mehrere Ergebnisseiten (Paging).
+    Liefert [] wenn Portal nicht erreichbar."""
     slug = re.sub(r"[^a-z0-9äöü]+", "-", (q or "").lower()).strip("-") or "iphone"
-    url = "https://www.kleinanzeigen.de/s-" + slug + "/k0"
-    r = _get(url)
-    if not r:
-        return []
-    soup = BeautifulSoup(r.text, "html.parser")
     out = []
-    for a in soup.select("article")[: limit * 2]:
-        try:
-            titel, bild, desc = "", "", ""
-            for sc in a.select('script[type="application/ld+json"]'):
-                try:
-                    d = json.loads(sc.string or "{}")
-                except Exception:
+    for page in range(1, pages + 1):
+        if len(out) >= limit:
+            break
+        url = ("https://www.kleinanzeigen.de/s-" + slug + "/k0" if page == 1
+               else "https://www.kleinanzeigen.de/s-" + slug + "/k0seite%dc0LpZ" % page)
+        r = _get(url)
+        if not r:
+            break  # weitere Seiten ebenfalls blockiert -> aufhoeren
+        soup = BeautifulSoup(r.text, "html.parser")
+        got_before = len(out)
+        for a in soup.select("article")[: limit * 2]:
+            try:
+                titel, bild, desc = "", "", ""
+                for sc in a.select('script[type="application/ld+json"]'):
+                    try:
+                        d = json.loads(sc.string or "{}")
+                    except Exception:
+                        continue
+                    titel = d.get("title") or titel
+                    bild = d.get("contentUrl") or bild
+                    desc = (d.get("description") or "")[:300] or desc
+                if not titel:
+                    h = a.select_one("[data-testid='aditem-title'], h2, .ellipsis")
+                    titel = h.get_text(strip=True) if h else a.get_text(" ", strip=True)[:80]
+                if not titel:
                     continue
-                titel = d.get("title") or titel
-                bild = d.get("contentUrl") or bild
-                desc = (d.get("description") or "")[:300] or desc
-            if not titel:
-                h = a.select_one("[data-testid='aditem-title'], h2, .ellipsis")
-                titel = h.get_text(strip=True) if h else a.get_text(" ", strip=True)[:80]
-            if not titel:
-                continue
-            # Titel-Header-Muell entfernen: "45888 Gelsenkirchen Heute, 06:22 Apple..."
-            titel = re.sub(r"^\d{5}\s+\S+\s+(Heute|Gestern|vor \d+|\d{2}:\d{2})[^A-Za-zÄÖÜ]*",
-                           "", titel).strip() or titel
-            href = a.get("data-href") or ""
-            link = ("https://www.kleinanzeigen.de" + href) if href.startswith("/") else href
-            text = a.get_text(" ", strip=True)
-            preis = _parse_preis(text)
-            if preis is None:
-                continue
-            m = re.match(r"(\d{5})\s+([A-Za-zÄÖÜäöü\- ]{2,30}?)\s+[A-ZÄÖÜ]", text)
-            standort = (m.group(2).strip() if m else "")
-            out.append({
-                "titel": titel[:80], "preis": preis, "link": link, "bild": bild,
-                "standort": standort, "zustand": _zustand(titel + " " + desc),
-                "plattform": "kleinanzeigen", "beschreibung": desc,
-            })
-            if len(out) >= limit:
-                break
-        except Exception as e:
-            log.info("KA-Parse-Fehler: %s", str(e)[:80])
+                # Titel-Header-Muell entfernen: "45888 Gelsenkirchen Heute, 06:22 Apple..."
+                titel = re.sub(r"^\d{5}\s+\S+\s+(Heute|Gestern|vor \d+|\d{2}:\d{2})[^A-Za-zÄÖÜ]*",
+                               "", titel).strip() or titel
+                href = a.get("data-href") or ""
+                link = ("https://www.kleinanzeigen.de" + href) if href.startswith("/") else href
+                text = a.get_text(" ", strip=True)
+                preis = _parse_preis(text)
+                if preis is None:
+                    continue
+                m = re.match(r"(\d{5})\s+([A-Za-zÄÖÜäöü\- ]{2,30}?)\s+[A-ZÄÖÜ]", text)
+                standort = (m.group(2).strip() if m else "")
+                out.append({
+                    "titel": titel[:80], "preis": preis, "link": link, "bild": bild,
+                    "standort": standort, "zustand": _zustand(titel + " " + desc),
+                    "plattform": "kleinanzeigen", "beschreibung": desc,
+                })
+                if len(out) >= limit:
+                    break
+            except Exception as e:
+                log.info("KA-Parse-Fehler: %s", str(e)[:80])
+        # Keine neuen Artikel auf dieser Seite -> naechste bringt vermutlich auch nichts
+        if len(out) == got_before:
+            break
     return out
 
 def ebay(q, limit=15):
