@@ -36,6 +36,7 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_plattform ON deals(plattform)")
     conn.execute("CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, portal TEXT, typ TEXT, nachricht TEXT, datum TEXT)")
     conn.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS gewinn_historie (id INTEGER PRIMARY KEY AUTOINCREMENT, q TEXT NOT NULL, plattform TEXT, gewinn_netto NUMERIC(10,2), kaufpreis NUMERIC(10,2), verkaufswert NUMERIC(10,2), zeit TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)")
     cur = conn.execute("SELECT * FROM users WHERE username='admin'")
     if not cur.fetchone():
         h = hashlib.sha256("admin123".encode()).hexdigest()
@@ -49,20 +50,30 @@ def init_db():
 
 init_db()
 
-# --- Gewinnhistorie (Postgres via DATABASE_URL, sonst deaktiviert) ---
+# --- Gewinnhistorie (Postgres via DATABASE_URL, sonst lokale SQLite-Fallback) ---
 try:
     import psycopg2
+    import psycopg2.extensions
 except Exception:
     psycopg2 = None
 HIST_DB = os.environ.get("DATABASE_URL", "").strip()
 
+def _is_postgres(conn):
+    """True, wenn die Hist-DB-Verbindung Postgres ist."""
+    return conn is not None and type(conn).__module__ == "psycopg2.extensions"
+
 def hist_conn():
-    if not HIST_DB or psycopg2 is None:
-        return None
+    if HIST_DB:
+        try:
+            return psycopg2.connect(HIST_DB, connect_timeout=5)
+        except Exception as e:
+            logging.warning("history db connect failed (postgres): %s", e)
+            return None
+    # Fallback: lokale SQLite (ohne externen Postgres/DATABASE_URL)
     try:
-        return psycopg2.connect(HIST_DB, connect_timeout=5)
+        return sqlite3.connect(DB_PATH)
     except Exception as e:
-        logging.warning("history db connect failed: %s", e)
+        logging.warning("history db connect failed (sqlite): %s", e)
         return None
 
 def hist_init():
@@ -71,15 +82,26 @@ def hist_init():
         return
     try:
         cur = conn.cursor()
-        cur.execute("""CREATE TABLE IF NOT EXISTS gewinn_historie (
-            id SERIAL PRIMARY KEY,
-            q TEXT NOT NULL,
-            plattform TEXT,
-            gewinn_netto NUMERIC(10,2),
-            kaufpreis NUMERIC(10,2),
-            verkaufswert NUMERIC(10,2),
-            zeit TIMESTAMP NOT NULL DEFAULT now()
-        )""")
+        if _is_postgres(conn):
+            cur.execute("""CREATE TABLE IF NOT EXISTS gewinn_historie (
+                id SERIAL PRIMARY KEY,
+                q TEXT NOT NULL,
+                plattform TEXT,
+                gewinn_netto NUMERIC(10,2),
+                kaufpreis NUMERIC(10,2),
+                verkaufswert NUMERIC(10,2),
+                zeit TIMESTAMP NOT NULL DEFAULT now()
+            )""")
+        else:
+            cur.execute("""CREATE TABLE IF NOT EXISTS gewinn_historie (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                q TEXT NOT NULL,
+                plattform TEXT,
+                gewinn_netto NUMERIC(10,2),
+                kaufpreis NUMERIC(10,2),
+                verkaufswert NUMERIC(10,2),
+                zeit TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_hist_q ON gewinn_historie(q, zeit)")
         conn.commit()
         cur.close()
@@ -97,13 +119,20 @@ def log_history(q, deals):
         return
     try:
         cur = conn.cursor()
+        if _is_postgres(conn):
+            sql = ("INSERT INTO gewinn_historie (q, plattform, gewinn_netto, kaufpreis, verkaufswert) "
+                   "VALUES (%s,%s,%s,%s,%s)")
+        else:
+            sql = ("INSERT INTO gewinn_historie (q, plattform, gewinn_netto, kaufpreis, verkaufswert) "
+                   "VALUES (?,?,?,?,?)")
         for d in deals[:20]:
-            cur.execute(
-                "INSERT INTO gewinn_historie (q, plattform, gewinn_netto, kaufpreis, verkaufswert) VALUES (%s,%s,%s,%s,%s)",
-                (q, d.get("plattform", ""), float(d.get("gewinn_netto") or 0),
-                 float(d.get("kaufpreis_gesamt") if d.get("kaufpreis_gesamt") is not None else (d.get("kaufpreis") or 0)),
-                 float(d.get("verkaufswert") or 0)),
-            )
+            cur.execute(sql, (
+                q,
+                d.get("plattform", ""),
+                float(d.get("gewinn_netto") or 0),
+                float(d.get("kaufpreis_gesamt") if d.get("kaufpreis_gesamt") is not None else (d.get("kaufpreis") or 0)),
+                float(d.get("verkaufswert") or 0),
+            ))
         conn.commit()
         cur.close()
     except Exception as e:
@@ -481,6 +510,7 @@ def api_deals():
     if alle is None:
         alle = scan(q)
         _CACHE[q] = (time.monotonic(), alle)
+        log_history(q, alle)
     gef = [d for d in alle if d["gewinn_netto"] >= min_g]
     # Reichweite Filter echte Entfernung
     if rw < 100:
@@ -495,17 +525,28 @@ def api_history():
         return jsonify({"erfolg":False,"aktiv":False,"punkte":[]})
     try:
         cur = conn.cursor()
-        cur.execute("""SELECT to_timestamp(floor(extract(epoch from zeit)/600)*600) AS h,
-                              AVG(gewinn_netto), MAX(gewinn_netto), COUNT(*)
-                       FROM gewinn_historie WHERE q=%s
-                       GROUP BY h ORDER BY h ASC LIMIT 120""", (q,))
+        if _is_postgres(conn):
+            cur.execute("""SELECT to_timestamp(floor(extract(epoch from zeit)/600)*600) AS h,
+                                  AVG(gewinn_netto), MAX(gewinn_netto), COUNT(*)
+                           FROM gewinn_historie WHERE q=%s
+                           GROUP BY h ORDER BY h ASC LIMIT 120""", (q,))
+        else:
+            cur.execute("""SELECT CAST(strftime('%s', zeit) AS INTEGER) / 600 * 600 AS h,
+                                  AVG(gewinn_netto), MAX(gewinn_netto), COUNT(*)
+                           FROM gewinn_historie WHERE q=?
+                           GROUP BY h ORDER BY h ASC LIMIT 120""", (q,))
         rows = cur.fetchall()
         cur.close()
-        punkte = [{"zeit": r[0].isoformat(), "schnitt": float(r[1] or 0),
-                   "max": float(r[2] or 0), "n": int(r[3] or 0)} for r in rows]
-        return jsonify({"erfolg":True,"aktiv":True,"q":q,"punkte":punkte})
+        punkte = []
+        for r in rows:
+            zeit = r[0]
+            if not _is_postgres(conn):
+                zeit = datetime.fromtimestamp(int(zeit)).isoformat()
+            punkte.append({"zeit": zeit, "schnitt": float(r[1] or 0),
+                           "max": float(r[2] or 0), "n": int(r[3] or 0)})
+        return jsonify({"erfolg": True, "aktiv": True, "q": q, "punkte": punkte})
     except Exception as e:
-        return jsonify({"erfolg":False,"aktiv":True,"fehler":str(e),"punkte":[]})
+        return jsonify({"erfolg": False, "aktiv": True, "fehler": str(e), "punkte": []})
     finally:
         conn.close()
 
