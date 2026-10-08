@@ -392,7 +392,8 @@ def nebenan(q):
 
 # Registrierte Portale: (name, funktion)
 # Nur Quellen, die WIRKLICH such-relevante Daten liefern.
-# shpock (Lorem-Platzhalter) & markt.de (ungefiltertes Carousel) liefern Muell -> raus.
+# kleinanzeigen (HTML, Multi-Page) + ebay (Browse-API).
+# JS-Portale (markt.de, vinted, willhaben) laufen ueber headless_scan (Playwright).
 def portale():
     """Liefert die Plattform-Liste (Nur-Quellelistierung). Liefert exakt die aktiven Portale."""
     return [
@@ -400,8 +401,15 @@ def portale():
         ("ebay", ebay_browse),
     ]
 
+
+def headless_aktiv():
+    """Headless-Scraping an/aus. Per Env abschaltbar (HEADLESS=0)."""
+    return os.environ.get("HEADLESS", "1").strip() not in ("0", "false", "off", "no")
+
+
 def scan_real(q):
-    """Alle registrierten Portale parallel abfragen (best effort)."""
+    """Alle registrierten Portale parallel abfragen (best effort).
+    HTTP-Portale + optional Headless-Browser-Scan (JS-Portale) parallel."""
     items, quellen = [], []
 
     def grab(name, fn):
@@ -410,8 +418,22 @@ def scan_real(q):
             return got, name
         return None, None
 
+    futures = []
     with ThreadPoolExecutor(max_workers=len(portale())) as pool:
-        futures = {pool.submit(grab, name, fn): name for name, fn in portale()}
+        for name, fn in portale():
+            futures.append(pool.submit(grab, name, fn))
+        # Headless-Scan parallel dazuschalten (eigener Browser-Thread)
+        if headless_aktiv():
+            def grab_headless():
+                try:
+                    from headless_scraper import headless_scan
+                    got = headless_scan(q)
+                    if got:
+                        return got, "headless"
+                except Exception as e:
+                    log.warning("headless_scan: %s", str(e)[:100])
+                return None, None
+            futures.append(pool.submit(grab_headless))
         for fut in as_completed(futures):
             got, name = fut.result()
             if got:
