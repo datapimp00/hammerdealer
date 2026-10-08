@@ -38,7 +38,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text)
 
 </div>
 <script>
-let API=localStorage.getItem('HAMMERDEALER_API')||'http://localhost:8765';
+let API=localStorage.getItem('HAMMERDEALER_API')||window.location.origin;
 let alleDeals=[];
 let favoriten=JSON.parse(localStorage.getItem('hammerdealer_favoriten')||'[]');
 let notizen=JSON.parse(localStorage.getItem('hammerdealer_notizen')||'{}');
