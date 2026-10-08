@@ -105,10 +105,22 @@ tr:hover td{background:rgba(59,130,246,.06)}
 </style></head><body>
 <header class='top'><div class='top-in'>
 <div class='logo'><span class='logo-mark'>&#128296;</span><span>HAMMERDEALER<small id='subline'>laedt ...</small></span></div>
-<div class='search'><input id='searchInput' type='text' list='suchverlauf' placeholder='Suche z. B. iPhone, MacBook, Fahrrad ...' autocomplete='off'><datalist id='suchverlauf'></datalist><button class='btn' id='btnSearch'>Suchen</button></div>
+<div class='search'><input id='searchInput' type='text' list='suchverlauf' placeholder='Wonach suchst du? z.B. PlayStation, Fahrrad, Auto …' autocomplete='off'><datalist id='suchverlauf'></datalist><button class='btn' id='btnSearch'>Suchen</button></div>
 <div class='live'><span class='live-dot'></span><span id='liveTxt'>verbinde ...</span></div>
 </div></header>
 <div class='wrap'>
+<div class='bar' style='margin-bottom:12px' id='chipsBar'>
+<span style='font-size:12px;color:var(--sec);font-weight:700'>Beliebte Suchen:</span>
+<button class='btn ghost sm' onclick="setChip('PlayStation 5')">🎮 PlayStation 5</button>
+<button class='btn ghost sm' onclick="setChip('MacBook')">💻 MacBook</button>
+<button class='btn ghost sm' onclick="setChip('iPhone')">📱 iPhone</button>
+<button class='btn ghost sm' onclick="setChip('Fahrrad')">🚲 Fahrrad</button>
+<button class='btn ghost sm' onclick="setChip('Auto')">🚗 Auto</button>
+<button class='btn ghost sm' onclick="setChip('Sneaker')">👟 Sneaker</button>
+<button class='btn ghost sm' onclick="setChip('Kamera')">📷 Kamera</button>
+<button class='btn ghost sm' onclick="setChip('Möbel')">🛋️ Möbel</button>
+<button class='btn ghost sm' onclick="setChip('Grafikkarte')">🖥️ Grafikkarte</button>
+</div>
 <div class='stats' id='stats'></div>
 <div class='tbl-card' id='histCard' style='display:none;margin-bottom:16px'><div class='tbl-h'><span>📈 Gewinn-Verlauf (je 10 Min)</span><span style='font-size:11px;color:var(--sec)' id='histInfo'></span></div><div style='padding:0 16px 16px' id='histChart'></div></div>
 <div class='bar'><div class='bar-row'>
@@ -191,7 +203,13 @@ function imgHTML(d,cls){
  return"<img src='"+d.bild+"' loading='lazy' referrerpolicy='no-referrer' style='"+s+";object-fit:cover;display:block' onerror='imgFail(this)'><div class='noimg imgfb' style='display:none'>&#128247;</div>";
 }
 async function lade(){
- var q=($('searchInput').value||'iPhone').trim()||'iPhone';
+ var q=($('searchInput').value||'').trim();
+ if(!q){
+  $('grid').innerHTML="<div class='empty'>Tippe etwas ein oder klick oben auf eine &#171;Beliebte Suche&#187; 👆</div>";
+  $('tbody').innerHTML='';$('stats').innerHTML='';$('histCard').style.display='none';
+  $('liveTxt').textContent='bereit';$('subline').textContent='bereit';
+  return;
+ }
  var rw=$('selReichweite')?$('selReichweite').value:'50';
  try{var hh=JSON.parse(localStorage.getItem('hd_history')||'[]');hh=hh.filter(function(x){return x!==q});hh.unshift(q);hh=hh.slice(0,8);localStorage.setItem('hd_history',JSON.stringify(hh));renderHistory()}catch(e){}
  var btn=$('btnSearch');btn.disabled=true;btn.innerHTML='<span class="spin"></span> Suche';
@@ -322,7 +340,7 @@ function openModal(id){
  "<div class='kv'><span>Einkaufspreis</span><b>"+eur(d.kaufpreis)+"</b></div>"+
  "<div class='kv'><span>+ Einkauf-Versand</span><b>"+eur(e.extra.versE)+"</b></div>"+
  "<div class='kv'><span>= Wareneinsatz</span><b>"+eur(c.kaufG)+"</b></div>"+
- "<div class='kv'><span>Verkaufserloes</span><b>"+eur(c.verk)+"</b></div>"+
+ "<div class='kv'><span>Verkaufserloes"+(d.verkaufswert_quelle?' <small style=\"color:var(--orange)\">'+esc(d.verkaufswert_quelle)+'</small>':'')+"</span><b>"+eur(c.verk)+"</b></div>"+
  "<div class='kv'><span>- Verkaufsgebuehr</span><b>"+eur(e.verkGeb)+"</b></div>"+
  "<div class='kv'><span>- Zahlungsgebuehr</span><b>"+eur(e.zahlGeb)+"</b></div>"+
  "<div class='kv'><span>- Versand Verkauf</span><b>"+eur(e.versV)+"</b></div>"+
@@ -351,6 +369,7 @@ function teilen(id){var d=null;for(var i=0;i<alleDeals.length;i++){if(alleDeals[
  var t='Deal: '+d.titel+' - Kauf '+eur(d._c.kaufG)+' - Verkauf '+eur(d._c.verk)+' - Netto '+eur(d._c.netto)+' - '+d.link;
  if(navigator.share){navigator.share({title:d.titel,text:t,url:d.link}).catch(function(){})} 
  else if(navigator.clipboard){navigator.clipboard.writeText(t);toast('Link kopiert')}else{prompt('Link kopieren:',t)}}
+function setChip(q){$('searchInput').value=q;lade()}
 function renderHistory(){try{var h=JSON.parse(localStorage.getItem('hd_history')||'[]');var dl=$('suchverlauf');if(dl)dl.innerHTML=h.map(function(x){return'<option value="'+esc(x)+'">'}).join('')}catch(e){}}
 function renderAlarm(){try{var a=JSON.parse(localStorage.getItem('hd_alarm')||'null');var b=$('btnAlarm');if(b)b.textContent=a?('Deal-Alarm: '+a.q+' ab '+a.min+' Euro'):'Deal-Alarm: Aus'}catch(e){}}
 function toggleAlarm(){try{var a=JSON.parse(localStorage.getItem('hd_alarm')||'null');if(a){localStorage.removeItem('hd_alarm');toast('Deal-Alarm aus')}else{var q=($('searchInput').value||'iPhone').trim()||'iPhone';var m=prompt('Alarm bei neuem Deal - Mindestgewinn in Euro:','100');if(m===null)return;localStorage.setItem('hd_alarm',JSON.stringify({q:q,min:Number(m)||100,seen:alleDeals.length}));toast('Alarm aktiv: '+q)}renderAlarm()}catch(e){}}

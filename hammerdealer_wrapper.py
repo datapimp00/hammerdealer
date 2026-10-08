@@ -261,8 +261,8 @@ def berechne(d):
     
     netto = round(brutto - prov,2)
     
-    if netto < 100:
-        return None  # MIN 100€ enforced
+    if netto < 0:
+        return None  # negative Gewinne raus (Untergrenze kommt aus API min_gewinn)
     
     # Standort Entfernung echt (Haversine) - Demo: Berlin als User Standort
     user_lat, user_lon = 52.52, 13.40  # Berlin default
@@ -344,35 +344,54 @@ def fallback_bild(plattform, titel=""):
     return "data:image/svg+xml," + urllib.parse.quote(svg)
 
 def scan(q):
+    """Echte Portale scannen (Kleinanzeigen + eBay/Vinted best effort)."""
     q = sanitize_q(q)
-    deals=[]
-    for i in range(5):
-        deals.append({"id":f"v_{int(time.time())}_{i}","titel":f"{q} Vinted VB","plattform":"vinted","kaufpreis":0,"verkaufswert":250,"zustand":"gut","link":"https://vinted.de","standort":"Berlin","bild":fallback_bild("vinted", q)})
-        deals.append({"id":f"k_{int(time.time())}_{i}","titel":f"{q} Kleinanzeigen nur Abholung","plattform":"kleinanzeigen","kaufpreis":80,"verkaufswert":260,"zustand":"gut","link":"https://kleinanzeigen.de","standort":"Hamburg","bild":fallback_bild("kleinanzeigen", q)})
-        deals.append({"id":f"e_{int(time.time())}_{i}","titel":f"{q} eBay","plattform":"ebay","kaufpreis":120,"verkaufswert":300,"zustand":"gut","link":"https://ebay.de","standort":"München","bild":fallback_bild("ebay", q)})
-    # Tausch filtern
-    deals.append({"id":f"tausch_{int(time.time())}","titel":f"{q} Tausch gegen...","plattform":"kleinanzeigen","kaufpreis":50,"verkaufswert":200,"zustand":"gut","link":"https://kleinanzeigen.de","bild":fallback_bild("kleinanzeigen", q)})
-    res=[]
-    for d in deals:
-        b=berechne(d)
+    try:
+        from scraper import scan_real, schaetze_verkauf
+    except Exception as e:
+        logging.warning("scraper import: %s", e)
+        return []
+    items, quellen = scan_real(q)
+    if not items:
+        return []
+    quelle_txt = "echt:" + "+".join(quellen)
+    res = []
+    for i, it in enumerate(items):
+        preis = float(it.get("preis") or 0)
+        if preis <= 0:
+            continue
+        d = {
+            "id": f"{it.get('plattform','x')[:2]}_{int(time.time())}_{i}",
+            "titel": it.get("titel") or q,
+            "plattform": it.get("plattform", "kleinanzeigen"),
+            "kaufpreis": preis,
+            "verkaufswert": schaetze_verkauf(preis, it.get("titel", "")),
+            "zustand": it.get("zustand", "gut"),
+            "link": it.get("link", ""),
+            "standort": it.get("standort", ""),
+            "bild": it.get("bild") or fallback_bild(it.get("plattform", "kleinanzeigen"), q),
+        }
+        b = berechne(d)
         if b:
+            b["verkaufswert_quelle"] = "Schaetzung (Faktor, kein Marktpreis)"
+            b["quelle"] = quelle_txt
             res.append(b)
     # Deduplizierung
-    seen=set()
-    uniq=[]
+    seen = set()
+    uniq = []
     for d in res:
-        key=(d["titel"][:30].lower(),d["plattform"])
+        key = (d["titel"][:30].lower(), d["plattform"])
         if key not in seen:
             seen.add(key)
             uniq.append(d)
     uniq.sort(key=lambda x: x["gewinn_netto"], reverse=True)
-    return [d for d in uniq if d["gewinn_netto"]>=100][:50]
+    return uniq[:50]
 
 @app.route('/api/deals')
 def api_deals():
-    try: min_g=float(request.args.get('min_gewinn',100))
-    except: min_g=100
-    if min_g<100: min_g=100
+    try: min_g=float(request.args.get('min_gewinn',0))
+    except: min_g=0
+    if min_g<0: min_g=0
     if min_g>1000: min_g=1000
     q=sanitize_q(request.args.get('q','iPhone'))
     try: rw=int(request.args.get('reichweite',50))
