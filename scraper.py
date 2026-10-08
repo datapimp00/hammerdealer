@@ -380,14 +380,11 @@ def nebenan(q):
         "https://www.nebenan.de")
 
 # Registrierte Portale: (name, funktion)
+# Nur Quellen, die WIRKLICH such-relevante Daten liefern.
+# shpock (Lorem-Platzhalter) & markt.de (ungefiltertes Carousel) liefern Muell -> raus.
 PORTALE = [
     ("kleinanzeigen", kleinanzeigen),
-    ("marktde", marktde),
-    ("willhaben", willhaben),
-    ("shpock", shpock),
     ("autoscout24", autoscout24),
-    ("refurbed", refurbed),
-    ("nebenan", nebenan),
     ("ebay", ebay),
     ("vinted", vinted),
 ]
