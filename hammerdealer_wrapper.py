@@ -261,15 +261,35 @@ def berechne(d):
         "bild": d.get("bild",""),
     }
 
+def fallback_bild(plattform, titel=""):
+    """Platzhalter-Bild pro Plattform (SVG data-URI, kein externer Host noetig)."""
+    farben = {
+        "ebay": ("#E53238", "eBay"),
+        "kleinanzeigen": ("#1D5546", "KA"),
+        "vinted": ("#007782", "Vinted"),
+        "facebook": ("#0866FF", "FB"),
+        "marktde": ("#FF6B00", "M"),
+    }
+    bg, kurz = farben.get(plattform, ("#86868b", "?"))
+    label = (titel[:1] or kurz).upper()
+    svg = (
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='200' height='150'>"
+        f"<rect width='200' height='150' fill='{bg}'/>"
+        f"<text x='100' y='85' font-family='sans-serif' font-size='48' fill='white' text-anchor='middle'>{label}</text>"
+        f"</svg>"
+    )
+    import urllib.parse
+    return "data:image/svg+xml," + urllib.parse.quote(svg)
+
 def scan(q):
     q = sanitize_q(q)
     deals=[]
     for i in range(5):
-        deals.append({"id":f"v_{int(time.time())}_{i}","titel":f"{q} Vinted VB","plattform":"vinted","kaufpreis":0,"verkaufswert":250,"zustand":"gut","link":"https://vinted.de","standort":"Berlin"})
-        deals.append({"id":f"k_{int(time.time())}_{i}","titel":f"{q} Kleinanzeigen nur Abholung","plattform":"kleinanzeigen","kaufpreis":80,"verkaufswert":260,"zustand":"gut","link":"https://kleinanzeigen.de","standort":"Hamburg"})
-        deals.append({"id":f"e_{int(time.time())}_{i}","titel":f"{q} eBay","plattform":"ebay","kaufpreis":120,"verkaufswert":300,"zustand":"gut","link":"https://ebay.de","standort":"München"})
+        deals.append({"id":f"v_{int(time.time())}_{i}","titel":f"{q} Vinted VB","plattform":"vinted","kaufpreis":0,"verkaufswert":250,"zustand":"gut","link":"https://vinted.de","standort":"Berlin","bild":fallback_bild("vinted", q)})
+        deals.append({"id":f"k_{int(time.time())}_{i}","titel":f"{q} Kleinanzeigen nur Abholung","plattform":"kleinanzeigen","kaufpreis":80,"verkaufswert":260,"zustand":"gut","link":"https://kleinanzeigen.de","standort":"Hamburg","bild":fallback_bild("kleinanzeigen", q)})
+        deals.append({"id":f"e_{int(time.time())}_{i}","titel":f"{q} eBay","plattform":"ebay","kaufpreis":120,"verkaufswert":300,"zustand":"gut","link":"https://ebay.de","standort":"München","bild":fallback_bild("ebay", q)})
     # Tausch filtern
-    deals.append({"id":f"tausch_{int(time.time())}","titel":f"{q} Tausch gegen...","plattform":"kleinanzeigen","kaufpreis":50,"verkaufswert":200,"zustand":"gut","link":"https://kleinanzeigen.de"})
+    deals.append({"id":f"tausch_{int(time.time())}","titel":f"{q} Tausch gegen...","plattform":"kleinanzeigen","kaufpreis":50,"verkaufswert":200,"zustand":"gut","link":"https://kleinanzeigen.de","bild":fallback_bild("kleinanzeigen", q)})
     res=[]
     for d in deals:
         b=berechne(d)

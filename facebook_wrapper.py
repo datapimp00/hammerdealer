@@ -23,6 +23,48 @@ def get_proxy():
     if not PROXIES: return None
     return {"http": random.choice(PROXIES), "https": random.choice(PROXIES)}
 
+def extract_bild(el, base_url=""):
+    """Extrahiert Bild-URL aus einem Listing-Element. Gibt '' zurueck wenn keins."""
+    try:
+        img = el.select_one("img")
+        if not img:
+            return ""
+        for attr in ("src", "data-src", "data-lazy-src", "srcset"):
+            val = img.get(attr, "")
+            if val:
+                # srcset: erste URL nehmen
+                if attr == "srcset":
+                    val = val.split(",")[0].strip().split(" ")[0]
+                val = val.strip()
+                if val.startswith("data:"):
+                    continue
+                if val.startswith("//"):
+                    return "https:" + val
+                if val.startswith("/") and base_url:
+                    from urllib.parse import urljoin
+                    return urljoin(base_url, val)
+                if val.startswith("http"):
+                    return val
+        return ""
+    except Exception:
+        return ""
+
+def extract_link(el, base_url="", fallback=""):
+    """Extrahiert Detail-Link aus einem Listing-Element."""
+    try:
+        a = el.select_one("a[href]")
+        if a and a.get("href"):
+            href = a["href"].strip()
+            if href.startswith("/") and base_url:
+                from urllib.parse import urljoin
+                return urljoin(base_url, href)
+            if href.startswith("http"):
+                return href
+    except Exception:
+        pass
+    return fallback
+
+
 @app.route('/')
 def home():
     return jsonify({"service":"facebook Wrapper READY","portal":"facebook","delay":MIN_DELAY,"proxies":len(PROXIES)})
@@ -49,13 +91,13 @@ def fetch_route():
         if "facebook"=="ebay":
             for el in soup.select('.s-item')[:5]:
                 t=el.get_text()[:60] if el else "facebook Fund"
-                deals.append({"id":f"eb_{int(time.time())}_{random.randint(1,999)}","titel":t,"kaufpreis":120,"verkaufswert":250,"plattform":"ebay","zustand":"gut","link":url})
+                deals.append({"id":f"eb_{int(time.time())}_{random.randint(1,999)}","titel":t,"kaufpreis":120,"verkaufswert":250,"plattform":"ebay","zustand":"gut","link":extract_link(el, "https://www.facebook.com/marketplace", url),"bild":extract_bild(el, "https://www.facebook.com/marketplace")})
         else:
             for el in soup.select('article')[:5]:
                 t=el.get_text()[:60] if el else "facebook Fund"
-                deals.append({"id":f"facebook_{int(time.time())}_{random.randint(1,999)}","titel":t,"kaufpreis":80,"verkaufswert":220,"plattform":"facebook","zustand":"gut","link":url})
+                deals.append({"id":f"facebook_{int(time.time())}_{random.randint(1,999)}","titel":t,"kaufpreis":80,"verkaufswert":220,"plattform":"facebook","zustand":"gut","link":extract_link(el, "https://www.facebook.com/marketplace", url),"bild":extract_bild(el, "https://www.facebook.com/marketplace")})
         if not deals:
-            deals=[{"id":f"facebook_{int(time.time())}","titel":f"facebook Deal","kaufpreis":80,"verkaufswert":230,"plattform":"facebook","zustand":"gut","link":url}]
+            deals=[{"id":f"facebook_{int(time.time())}","titel":f"facebook Deal","kaufpreis":80,"verkaufswert":230,"plattform":"facebook","zustand":"gut","link":url,"bild":""}]
         conn=sqlite3.connect(DB_PATH)
         for d in deals:
             conn.execute("INSERT OR REPLACE INTO cache VALUES (?,?,?,?)", (d["id"],d["titel"],d["verkaufswert"],datetime.now().isoformat()))
@@ -67,7 +109,7 @@ def fetch_route():
             conn=sqlite3.connect(DB_PATH)
             rows=conn.execute("SELECT * FROM cache ORDER BY datum DESC LIMIT 5").fetchall()
             conn.close()
-            deals=[{"id":r[0],"titel":r[1],"kaufpreis":80,"verkaufswert":r[2],"plattform":"facebook","zustand":"gut","link":url} for r in rows]
+            deals=[{"id":r[0],"titel":r[1],"kaufpreis":80,"verkaufswert":r[2],"plattform":"facebook","zustand":"gut","link":url,"bild":""} for r in rows]
             if deals:
                 return jsonify({"erfolg":True,"portal":"facebook","fallback_cache":True,"deals":deals,"fehler":str(e)})
         except:

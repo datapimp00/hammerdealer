@@ -23,6 +23,47 @@ def get_proxy():
     if not PROXIES: return None
     return {"http": random.choice(PROXIES), "https": random.choice(PROXIES)}
 
+def extract_bild(el, base_url=""):
+    """Extrahiert Bild-URL aus einem Listing-Element. Gibt '' zurueck wenn keins."""
+    try:
+        img = el.select_one("img")
+        if not img:
+            return ""
+        for attr in ("src", "data-src", "data-lazy-src", "srcset"):
+            val = img.get(attr, "")
+            if val:
+                # srcset: erste URL nehmen
+                if attr == "srcset":
+                    val = val.split(",")[0].strip().split(" ")[0]
+                val = val.strip()
+                if val.startswith("data:"):
+                    continue
+                if val.startswith("//"):
+                    return "https:" + val
+                if val.startswith("/") and base_url:
+                    from urllib.parse import urljoin
+                    return urljoin(base_url, val)
+                if val.startswith("http"):
+                    return val
+        return ""
+    except Exception:
+        return ""
+
+def extract_link(el, base_url="", fallback=""):
+    """Extrahiert Detail-Link aus einem Listing-Element."""
+    try:
+        a = el.select_one("a[href]")
+        if a and a.get("href"):
+            href = a["href"].strip()
+            if href.startswith("/") and base_url:
+                from urllib.parse import urljoin
+                return urljoin(base_url, href)
+            if href.startswith("http"):
+                return href
+    except Exception:
+        pass
+    return fallback
+
 @app.route('/')
 def home():
     return jsonify({"service":"kleinanzeigen Wrapper READY","portal":"kleinanzeigen","delay":MIN_DELAY,"proxies":len(PROXIES)})
@@ -53,9 +94,9 @@ def fetch_route():
         else:
             for el in soup.select('article')[:5]:
                 t=el.get_text()[:60] if el else "kleinanzeigen Fund"
-                deals.append({"id":f"kleinanzeigen_{int(time.time())}_{random.randint(1,999)}","titel":t,"kaufpreis":80,"verkaufswert":220,"plattform":"kleinanzeigen","zustand":"gut","link":url})
+                deals.append({"id":f"kleinanzeigen_{int(time.time())}_{random.randint(1,999)}","titel":t,"kaufpreis":80,"verkaufswert":220,"plattform":"kleinanzeigen","zustand":"gut","link":extract_link(el, "https://www.kleinanzeigen.de", url),"bild":extract_bild(el, "https://www.kleinanzeigen.de")})
         if not deals:
-            deals=[{"id":f"kleinanzeigen_{int(time.time())}","titel":f"kleinanzeigen Deal","kaufpreis":80,"verkaufswert":230,"plattform":"kleinanzeigen","zustand":"gut","link":url}]
+            deals=[{"id":f"kleinanzeigen_{int(time.time())}","titel":f"kleinanzeigen Deal","kaufpreis":80,"verkaufswert":230,"plattform":"kleinanzeigen","zustand":"gut","link":url,"bild":""}]
         conn=sqlite3.connect(DB_PATH)
         for d in deals:
             conn.execute("INSERT OR REPLACE INTO cache VALUES (?,?,?,?)", (d["id"],d["titel"],d["verkaufswert"],datetime.now().isoformat()))

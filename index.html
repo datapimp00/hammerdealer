@@ -78,7 +78,7 @@ function render(){
  let tbody=document.getElementById('tbody');
  tbody.innerHTML=filtered.map(x=>`<tr>
 <td><span style='cursor:pointer' onclick='toggleFav("${x.id}")'>${favoriten.includes(x.id)?'★':'☆'}</span></td>
-<td><div style='font-weight:600'>${x.titel}</div><div style='font-size:10px'>${x.bild?`<img src='${x.bild}' style='width:40px;height:40px;object-fit:cover;border-radius:6px' onerror="this.style.display='none'">`:''}</div><div style='font-size:10px'>Notiz: <input value='${notizen[x.id]||''}' onchange='setNotiz("${x.id}",this.value)' placeholder='Notiz' style='width:80px'></div></td>
+<td><div style='font-weight:600'>${x.titel}</div><div style='font-size:10px;margin:4px 0'>${imgTag(x,80)}</div><div style='font-size:10px'>Notiz: <input value='${notizen[x.id]||''}' onchange='setNotiz("${x.id}",this.value)' placeholder='Notiz' style='width:80px'></div></td>
 <td>${x.plattform} ${x.plattform==='ebay'?'🛒':x.plattform==='kleinanzeigen'?'📦':'👕'}</td>
 <td><span class='badge ${x.zustand==='neu'?'badge-zustand-neu':x.zustand==='defekt'?'badge-zustand-defekt':''}' style='background:var(--gray)'>${x.zustand||'gut'}</span></td>
 <td>${x.standort||''} ${x.entfernung_km?`<a href='https://maps.google.com/?q=${x.entfernung_km}km' target='_blank'>📍 Maps</a>`:''}</td>
@@ -95,11 +95,17 @@ function render(){
 </tr>`).join('');
 }
 
+function imgTag(d,size){
+ size=size||64;
+ if(!d.bild) return `<div style='width:${size}px;height:${size}px;border-radius:8px;background:var(--gray);display:flex;align-items:center;justify-content:center;font-size:20px'>📷</div>`;
+ return `<img src='${d.bild}' loading='lazy' referrerpolicy='no-referrer' style='width:${size}px;height:${size}px;object-fit:cover;border-radius:8px;flex-shrink:0' onerror="this.outerHTML=\"<div style='width:${size}px;height:${size}px;border-radius:8px;background:var(--gray);display:flex;align-items:center;justify-content:center;font-size:20px'>📷</div>\"">`;
+}
+
 function card(d,color){
- return `<div class='card' style='border-left:4px solid ${color||'#34c759'}'><div style='font-size:13px;font-weight:600'>${d.titel} ${d.vb?'<span class=badge-vb>VB</span>':''} ${d.nur_abholung?'<span class=badge-abholung>Abholung</span>':''}</div><div style='font-size:11px;color:#86868b'>Kauf ${d.kaufpreis_gesamt||d.kaufpreis}€ → Verkauf ${d.verkaufswert}€<br>Netto <b>${d.gewinn_netto}€</b> - ${d.plattform} ${d.entfernung_km?`📍${d.entfernung_km}km`:''} - ${d.zustand||''}</div></div>`;
+ return `<div class='card' style='border-left:4px solid ${color||'#34c759'}'><div style='display:flex;gap:8px'>${imgTag(d,64)}<div><div style='font-size:13px;font-weight:600'>${d.titel} ${d.vb?'<span class=badge-vb>VB</span>':''} ${d.nur_abholung?'<span class=badge-abholung>Abholung</span>':''}</div><div style='font-size:11px;color:#86868b'>Kauf ${d.kaufpreis_gesamt||d.kaufpreis}€ → Verkauf ${d.verkaufswert}€<br>Netto <b>${d.gewinn_netto}€</b> - ${d.plattform} ${d.entfernung_km?`📍${d.entfernung_km}km`:''} - ${d.zustand||''}</div></div></div></div>`;
 }
 function cardTop(d,i){
- return `<div class='card' style='border-left:4px solid ${i==0?'#FFD700':i<3?'#C0C0C0':'#CD7F32'}'><div style='font-size:13px;font-weight:600'>#${i+1} ${d.titel}</div><div style='font-size:11px'>Netto <b>${d.gewinn_netto}€</b> - Kauf ${d.kaufpreis}€ → Verkauf ${d.verkaufswert}€ - ROI ${d.roi_prozent||''}%</div></div>`;
+ return `<div class='card' style='border-left:4px solid ${i==0?'#FFD700':i<3?'#C0C0C0':'#CD7F32'}'><div style='display:flex;gap:8px'>${imgTag(d,56)}<div><div style='font-size:13px;font-weight:600'>#${i+1} ${d.titel}</div><div style='font-size:11px'>Netto <b>${d.gewinn_netto}€</b> - Kauf ${d.kaufpreis}€ → Verkauf ${d.verkaufswert}€ - ROI ${d.roi_prozent||''}%</div></div></div></div>`;
 }
 function toggleFav(id){ if(favoriten.includes(id)) favoriten=favoriten.filter(x=>x!==id); else favoriten.push(id); localStorage.setItem('hammerdealer_favoriten',JSON.stringify(favoriten)); render(); }
 function setNotiz(id,val){ notizen[id]=val; localStorage.setItem('hammerdealer_notizen',JSON.stringify(notizen)); }
