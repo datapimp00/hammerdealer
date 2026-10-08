@@ -3,6 +3,8 @@ import os, re, json, random, logging
 import requests
 from bs4 import BeautifulSoup
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 log = logging.getLogger(__name__)
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -382,24 +384,33 @@ def nebenan(q):
 # Registrierte Portale: (name, funktion)
 # Nur Quellen, die WIRKLICH such-relevante Daten liefern.
 # shpock (Lorem-Platzhalter) & markt.de (ungefiltertes Carousel) liefern Muell -> raus.
-PORTALE = [
-    ("kleinanzeigen", kleinanzeigen),
-    ("autoscout24", autoscout24),
-    ("ebay", ebay_browse),
-    ("vinted", vinted),
-]
+def portale():
+    """Liefert die Plattform-Liste (Nur-Quellelistierung). Liefert exakt die aktiven Portale."""
+    return [
+        ("kleinanzeigen", kleinanzeigen),
+        ("autoscout24", autoscout24),
+        ("ebay", ebay_browse),
+        ("vinted", vinted),
+    ]
 
 def scan_real(q):
-    """Alle registrierten Portale abfragen (best effort)."""
+    """Alle registrierten Portale parallel abfragen (best effort)."""
     items, quellen = [], []
-    for name, fn in PORTALE:
-        try:
-            got = fn(q)
+
+    def grab(name, fn):
+        got = fn(q)
+        if got:
+            return got, name
+        return None, None
+
+    with ThreadPoolExecutor(max_workers=len(portale())) as pool:
+        futures = {pool.submit(grab, name, fn): name for name, fn in portale()}
+        for fut in as_completed(futures):
+            got, name = fut.result()
             if got:
                 items += got
                 quellen.append(name)
-        except Exception as e:
-            log.warning("%s: %s", name, str(e)[:100])
+
     return items, quellen
 
 # ---------- eBay Browse API (offiziell, kostenlos) ----------

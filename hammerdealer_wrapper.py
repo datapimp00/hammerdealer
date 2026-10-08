@@ -19,6 +19,9 @@ PROXY_LIST = os.environ.get("PROXY_LIST","")
 PROXIES = [p.strip() for p in PROXY_LIST.split(",") if p.strip()] if PROXY_LIST else []
 DB_PATH = os.path.join(os.path.dirname(__file__), "hammerdealer.db")
 MIN_PROFIT = 100
+
+_CACHE = {}
+_CACHE_TTL = 60  # Sekunden, bis ein Scan wiederholt aus dem Cache gegeben wird
 START_TIME = datetime.now()
 
 def get_db():
@@ -395,6 +398,18 @@ def scan(q):
     uniq.sort(key=lambda x: x["gewinn_netto"], reverse=True)
     return uniq[:50]
 
+
+def _cache_get(q):
+    """Gibt cachende Ergebnisse der Suche (mit TTL) oder None zurück."""
+    entry = _CACHE.get(q)
+    if entry is None:
+        return None
+    if time.monotonic() - entry[0] > _CACHE_TTL:
+        _CACHE.pop(q, None)
+        return None
+    return entry[1]
+
+
 @app.route('/api/deals')
 def api_deals():
     try: min_g=float(request.args.get('min_gewinn',0))
@@ -406,16 +421,15 @@ def api_deals():
     except: rw=50
     if rw<5: rw=5
     if rw>200: rw=200
-    alle=scan(q)
-    gef=[d for d in alle if d["gewinn_netto"]>=min_g]
+    alle = _cache_get(q)
+    if alle is None:
+        alle = scan(q)
+        _CACHE[q] = (time.monotonic(), alle)
+    gef = [d for d in alle if d["gewinn_netto"] >= min_g]
     # Reichweite Filter echte Entfernung
-    if rw<100:
-        gef=[d for d in gef if d["entfernung_km"] is None or d["entfernung_km"]<=rw or d["plattform"] in ["ebay","vinted"]]
-    try:
-        log_history(q, gef)
-    except Exception:
-        pass
-    return jsonify({"erfolg":True,"stand":datetime.now().strftime("%d.%m.%Y %H:%M:%S"),"anzahl":len(gef),"deals":gef,"min_profit":100,"filter":{"min_gewinn":min_g,"reichweite":rw,"q":q}})
+    if rw < 100:
+        gef = [d for d in gef if d["entfernung_km"] is None or d["entfernung_km"] <= rw or d["plattform"] in ["ebay", "vinted"]]
+    return jsonify({"erfolg": True, "stand": datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "anzahl": len(gef), "deals": gef, "min_profit": 100, "filter": {"min_gewinn": min_g, "reichweite": rw, "q": q}})
 
 @app.route('/api/history')
 def api_history():
