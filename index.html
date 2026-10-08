@@ -110,6 +110,7 @@ tr:hover td{background:rgba(59,130,246,.06)}
 </div></header>
 <div class='wrap'>
 <div class='stats' id='stats'></div>
+<div class='tbl-card' id='histCard' style='display:none;margin-bottom:16px'><div class='tbl-h'><span>📈 Gewinn-Verlauf (je 10 Min)</span><span style='font-size:11px;color:var(--sec)' id='histInfo'></span></div><div style='padding:0 16px 16px' id='histChart'></div></div>
 <div class='bar'><div class='bar-row'>
 <select id='filterPlattform' title='Portal'><option value=''>Alle Portale</option><option value='ebay'>eBay</option><option value='kleinanzeigen'>Kleinanzeigen</option><option value='vinted'>Vinted</option><option value='facebook'>Facebook</option></select>
 <select id='filterZustand' title='Zustand'><option value=''>Jeder Zustand</option><option value='neu'>Neu</option><option value='gut'>Gut</option><option value='defekt'>Defekt</option></select>
@@ -204,6 +205,7 @@ async function lade(){
   $('liveTxt').textContent='live - '+alleDeals.length+' Deals';
   $('subline').textContent=(stand||zeitSeit())+' - '+alleDeals.length+' Deals';
   render();
+  ladeHistorie(q);
  }catch(e){
   $('liveTxt').textContent='offline';
   $('grid').innerHTML="<div class='empty'>Fehler: "+esc(e.message||e)+"<br><br><button class='btn' onclick='lade()'>Erneut versuchen</button></div>";
@@ -231,6 +233,44 @@ function gefiltert(){
  else if(sb==='titel')l.sort(function(a,b){return String(a.titel).localeCompare(String(b.titel))});
  return l;
 }
+async function ladeHistorie(q){
+ var card=$('histCard');
+ try{
+  var r=await fetch(API+'/api/history?q='+encodeURIComponent(q));
+  if(!r.ok)throw 0;
+  var d=await r.json();
+  if(!d.aktiv||!d.punkte||d.punkte.length<2){
+   card.style.display='none';
+   if(d.aktiv===false)$('histInfo').textContent='Datenbank-Verlauf derzeit inaktiv';
+   return;
+  }
+  var p=d.punkte,W=640,H=170,pad=34;
+  var maxV=0;p.forEach(function(x){if(x.max>maxV)maxV=x.max});
+  maxV=Math.ceil(maxV/50)*50||100;
+  function X(i){return pad+i*(W-pad-8)/Math.max(1,p.length-1)}
+  function Y(v){return H-20-(v/maxV)*(H-40)}
+  var lineS=p.map(function(x,i){return (i?'L':'M')+X(i).toFixed(1)+' '+Y(x.schnitt).toFixed(1)}).join(' ');
+  var lineM=p.map(function(x,i){return (i?'L':'M')+X(i).toFixed(1)+' '+Y(x.max).toFixed(1)}).join(' ');
+  var svg="<svg viewBox='0 0 "+W+" "+H+"' style='width:100%;height:auto;background:transparent' role='img' aria-label='Gewinnverlauf'>";
+  svg+="<line x1='"+pad+"' y1='"+(H-20)+"' x2='"+(W-8)+"' y2='"+(H-20)+"' stroke='var(--line)' stroke-width='1'/>";
+  svg+="<line x1='"+pad+"' y1='"+Y(maxV)+"' x2='"+pad+"' y2='"+(H-20)+"' stroke='var(--line)' stroke-width='1'/>";
+  svg+="<text x='2' y='"+(Y(maxV)+4)+"' fill='var(--sec)' font-size='10'>"+maxV+" €</text>";
+  svg+="<text x='2' y='"+(H-17)+"' fill='var(--sec)' font-size='10'>0</text>";
+  svg+="<path d='"+lineM+"' fill='none' stroke='var(--orange)' stroke-width='2' opacity='.7'/>";
+  svg+="<path d='"+lineS+"' fill='none' stroke='var(--green)' stroke-width='2.5'/>";
+  var n=p.length;
+  svg+="<text x='"+pad+"' y='"+(H-6)+"' fill='var(--sec)' font-size='10'>"+esc(p[0].zeit.slice(5,16))+"</text>";
+  if(n>1)svg+="<text x='"+(W-120)+"' y='"+(H-6)+"' fill='var(--sec)' font-size='10'>"+esc(p[n-1].zeit.slice(5,16))+"</text>";
+  svg+="</svg>";
+  svg+="<div style='display:flex;gap:14px;font-size:11px;color:var(--sec);margin-top:4px'>"
+    +"<span><span style='color:var(--green)'>━</span> Schnitt-Netto</span>"
+    +"<span><span style='color:var(--orange)'>━</span> Best-Deal</span></div>";
+  $('histChart').innerHTML=svg;
+  $('histInfo').textContent=p.length+' Datenpunkte';
+  card.style.display='block';
+ }catch(e){card.style.display='none'}
+}
+
 function render(){
  var l=gefiltert(),o=opts();
  var n100=alleDeals.filter(function(x){return calc(x,o).netto>=100}).length;

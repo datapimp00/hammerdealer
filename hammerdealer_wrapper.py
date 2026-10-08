@@ -46,6 +46,68 @@ def init_db():
 
 init_db()
 
+# --- Gewinnhistorie (Postgres via DATABASE_URL, sonst deaktiviert) ---
+try:
+    import psycopg2
+except Exception:
+    psycopg2 = None
+HIST_DB = os.environ.get("DATABASE_URL", "").strip()
+
+def hist_conn():
+    if not HIST_DB or psycopg2 is None:
+        return None
+    try:
+        return psycopg2.connect(HIST_DB, connect_timeout=5)
+    except Exception as e:
+        logging.warning("history db connect failed: %s", e)
+        return None
+
+def hist_init():
+    conn = hist_conn()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS gewinn_historie (
+            id SERIAL PRIMARY KEY,
+            q TEXT NOT NULL,
+            plattform TEXT,
+            gewinn_netto NUMERIC(10,2),
+            kaufpreis NUMERIC(10,2),
+            verkaufswert NUMERIC(10,2),
+            zeit TIMESTAMP NOT NULL DEFAULT now()
+        )""")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_hist_q ON gewinn_historie(q, zeit)")
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        logging.warning("history init failed: %s", e)
+    finally:
+        conn.close()
+
+hist_init()
+
+def log_history(q, deals):
+    """Speichert pro Anfrage einen Snapshot der Top-Deals (max 20)."""
+    conn = hist_conn()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        for d in deals[:20]:
+            cur.execute(
+                "INSERT INTO gewinn_historie (q, plattform, gewinn_netto, kaufpreis, verkaufswert) VALUES (%s,%s,%s,%s,%s)",
+                (q, d.get("plattform", ""), float(d.get("gewinn_netto") or 0),
+                 float(d.get("kaufpreis_gesamt") if d.get("kaufpreis_gesamt") is not None else (d.get("kaufpreis") or 0)),
+                 float(d.get("verkaufswert") or 0)),
+            )
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        logging.warning("history log failed: %s", e)
+    finally:
+        conn.close()
+
 USER_AGENTS = ["Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15","Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0"]
 
 PLATFORM_FEES = {
@@ -322,7 +384,33 @@ def api_deals():
     # Reichweite Filter echte Entfernung
     if rw<100:
         gef=[d for d in gef if d["entfernung_km"] is None or d["entfernung_km"]<=rw or d["plattform"] in ["ebay","vinted"]]
+    try:
+        log_history(q, gef)
+    except Exception:
+        pass
     return jsonify({"erfolg":True,"stand":datetime.now().strftime("%d.%m.%Y %H:%M:%S"),"anzahl":len(gef),"deals":gef,"min_profit":100,"filter":{"min_gewinn":min_g,"reichweite":rw,"q":q}})
+
+@app.route('/api/history')
+def api_history():
+    q = sanitize_q(request.args.get('q','iPhone'))
+    conn = hist_conn()
+    if not conn:
+        return jsonify({"erfolg":False,"aktiv":False,"punkte":[]})
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT to_timestamp(floor(extract(epoch from zeit)/600)*600) AS h,
+                              AVG(gewinn_netto), MAX(gewinn_netto), COUNT(*)
+                       FROM gewinn_historie WHERE q=%s
+                       GROUP BY h ORDER BY h ASC LIMIT 120""", (q,))
+        rows = cur.fetchall()
+        cur.close()
+        punkte = [{"zeit": r[0].isoformat(), "schnitt": float(r[1] or 0),
+                   "max": float(r[2] or 0), "n": int(r[3] or 0)} for r in rows]
+        return jsonify({"erfolg":True,"aktiv":True,"q":q,"punkte":punkte})
+    except Exception as e:
+        return jsonify({"erfolg":False,"aktiv":True,"fehler":str(e),"punkte":[]})
+    finally:
+        conn.close()
 
 @app.route('/api/health')
 def health():
