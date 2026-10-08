@@ -397,7 +397,6 @@ def portale():
     """Liefert die Plattform-Liste (Nur-Quellelistierung). Liefert exakt die aktiven Portale."""
     return [
         ("kleinanzeigen", kleinanzeigen),
-        ("autoscout24", autoscout24),
         ("ebay", ebay_browse),
         ("vinted", vinted),
     ]
