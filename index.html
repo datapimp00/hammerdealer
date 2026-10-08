@@ -5,11 +5,6 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text)
 <header><div style='font-size:20px;font-weight:700'>HAMMERDEALER ULTRA V5 FINAL - Wirklich alles</div><div style='font-size:11px;color:var(--sec)'>Ab 100€ sicher | Ab 50€ extra | Höchste Gewinne | + Tabelle + Filter + Sortierung + Export + Favoriten + alle Kleinigkeiten</div></header>
 <div class='content'>
 
-<div class='card' style='background:linear-gradient(135deg,#000,#333);color:white'>
-<div style='font-weight:700'>🔍 Nach 5. Durchgang - fehlte noch: Tabelle, Filter, Sortierung, Favoriten, Export, Bild, Zustand Badge, Standort Maps, VB/Abholung Badges, Zeit seit Scan, Toggle Versand/PayPal/Verpackung/Versicherung/Privat/Gewerbe, Notiz, Status, Teilen, Druck, Screenshot</div>
-<div style='font-size:11px;margin-top:8px'>Jetzt alles drin: 3 Spalten + Gesamt Tabelle unten + Filter nach Plattform + Sortierung Gewinn/Datum/Entfernung + Suche Autocomplete + Favoriten ★ + CSV Export + Druck + Teilen WhatsApp/Link + Bild Vorschau + Zustand farbig + Standort Google Maps + VB gelb/Abholung blau/Verschenkt grün + Zeit vor 5 Min + Anbieter Bewertung + Beobachter + Sofort-Kauf/Auktion + Versand Toggle + Privat/Gewerbe Toggle + PayPal Toggle + Verpackung Toggle + Versicherung Toggle + Screenshot + Notiz + Status offen/gekauft/verkauft/retour</div>
-</div>
-
 <div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px'>
 <select id='filterPlattform' class='btn' style='background:var(--gray);color:var(--text)'><option value=''>Alle Portale</option><option value='ebay'>eBay</option><option value='kleinanzeigen'>Kleinanzeigen</option><option value='vinted'>Vinted</option><option value='facebook'>Facebook</option><option value='marktde'>Markt.de</option></select>
 <select id='sortBy' class='btn' style='background:var(--gray);color:var(--text)'><option value='gewinn_desc'>Gewinn absteigend</option><option value='gewinn_asc'>Gewinn aufsteigend</option><option value='entfernung'>Entfernung</option><option value='datum'>Datum</option><option value='plattform'>Plattform</option></select>
@@ -95,10 +90,16 @@ function render(){
 </tr>`).join('');
 }
 
+function imgFail(el){ el.style.display='none'; var fb=el.nextElementSibling; if(fb) fb.style.display='flex'; }
+
+function imgPh(size){
+ return `<div style='width:${size}px;height:${size}px;border-radius:8px;background:var(--gray);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0'>📷</div>`;
+}
+
 function imgTag(d,size){
  size=size||64;
- if(!d.bild) return `<div style='width:${size}px;height:${size}px;border-radius:8px;background:var(--gray);display:flex;align-items:center;justify-content:center;font-size:20px'>📷</div>`;
- return `<img src='${d.bild}' loading='lazy' referrerpolicy='no-referrer' style='width:${size}px;height:${size}px;object-fit:cover;border-radius:8px;flex-shrink:0' onerror="this.outerHTML=\"<div style='width:${size}px;height:${size}px;border-radius:8px;background:var(--gray);display:flex;align-items:center;justify-content:center;font-size:20px'>📷</div>\"">`;
+ if(!d.bild) return imgPh(size);
+ return `<span style='display:inline-flex;flex-shrink:0'><img src='${d.bild}' loading='lazy' referrerpolicy='no-referrer' style='width:${size}px;height:${size}px;object-fit:cover;border-radius:8px' onerror='imgFail(this)'><span style='display:none;width:${size}px;height:${size}px;border-radius:8px;background:var(--gray);align-items:center;justify-content:center;font-size:20px'>📷</span></span>`;
 }
 
 function card(d,color){
