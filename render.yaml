@@ -12,6 +12,9 @@ services:
         sync: false
       # In Render-Dashboard: 1 Service Free -> Environment -> ebaga
       # die Keys nur hier eintragen, nicht ins Git.
+      # Produktions-Konfiguration (Render → Environment):
+      #   EBAY_APP_ID und EBAY_CERT_ID = deine Produktions-Schlüssel
+      #   (nicht ins Git! Dort steht nur ein Platzhalter.) -> nachfolgend.
       - key: MIN_PROFIT
         value: 50
       - key: EBAY_APP_ID
