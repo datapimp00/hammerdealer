@@ -1,120 +1,326 @@
-<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>ULTRA V5 FINAL - Alle Spalten + Tabelle + Filter + Sortierung + Export</title><style>
-:root{--bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--sec:#86868b;--blue:#0071e3;--gray:#e8e8ed;--green:#34c759;--orange:#FF9500;--gold:#FFD700} @media(prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f5f5f7;--sec:#98989d;--gray:#2c2c2e}}
-body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);margin:0;font-size:13px} header{background:rgba(255,255,255,0.8);backdrop-filter:blur(20px);padding:12px 20px;position:sticky;top:0;z-index:10} .content{padding:16px;max-width:1600px;margin:0 auto} .card{background:var(--card);border-radius:14px;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,0.08);margin-bottom:10px} .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px} @media(max-width:1200px){.grid3{grid-template-columns:1fr 1fr}} @media(max-width:700px){.grid3{grid-template-columns:1fr}} table{width:100%;border-collapse:collapse;font-size:12px} th{background:var(--gray);padding:8px;text-align:left;position:sticky;top:0} td{padding:6px 8px;border-bottom:1px solid var(--gray)} .badge{font-size:10px;padding:2px 6px;border-radius:10px;display:inline-block} .badge-vb{background:#FFEB3B;color:#000} .badge-abholung{background:#2196F3;color:white} .badge-verschenkt{background:#4CAF50;color:white} .badge-zustand-neu{background:var(--green);color:white} .badge-zustand-defekt{background:#F44336;color:white} .btn{padding:6px 10px;border-radius:8px;border:0;background:var(--blue);color:white;font-size:12px;cursor:pointer;margin:2px}
+<!DOCTYPE html><html lang='de'><head><meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>HAMMERDEALER - Deals ab 100 Euro Gewinn</title>
+<meta name='description' content='Findet profitable Deals auf eBay, Kleinanzeigen, Vinted und Facebook.'>
+<link rel='manifest' href='manifest.json'>
+<meta name='theme-color' content='#0a0a0f'>
+<style>
+*{box-sizing:border-box}
+:root{--bg:#0a0a0f;--card:#17171f;--card2:#1e1e28;--line:rgba(255,255,255,.09);
+--text:#f5f5f7;--sec:#a1a1aa;--mut:#71717a;--blue:#3b82f6;--green:#22c55e;--orange:#f59e0b;
+--red:#ef4444;--gold:#fbbf24;--r:16px;--sh:0 8px 30px rgba(0,0,0,.45)}
+@media(prefers-color-scheme:light){:root{--bg:#f4f4f6;--card:#fff;--card2:#f4f4f7;
+--line:rgba(0,0,0,.09);--text:#111113;--sec:#52525b;--sh:0 4px 18px rgba(0,0,0,.08)}}
+body{font-family:-apple-system,BlinkMacSystemFont,Inter,Segoe UI,sans-serif;margin:0;font-size:14px;
+min-height:100vh;color:var(--text);
+background:radial-gradient(1200px 500px at 50% -100px,rgba(59,130,246,.16),transparent),var(--bg)}
+a{color:var(--blue)}
+.top{position:sticky;top:0;z-index:50;background:rgba(10,10,15,.78);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+@media(prefers-color-scheme:light){.top{background:rgba(255,255,255,.85)}}
+.top-in{max-width:1400px;margin:0 auto;padding:12px 20px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px}
+.logo-mark{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#f59e0b,#ef4444);display:flex;align-items:center;justify-content:center;font-size:19px}
+.logo small{display:block;font-size:11px;font-weight:500;color:var(--sec)}
+.search{flex:1;min-width:220px;display:flex;gap:8px}
+.search input{flex:1;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:14px;outline:none}
+.search input:focus{border-color:var(--blue)}
+.btn{padding:10px 16px;border-radius:12px;border:1px solid var(--line);background:var(--blue);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:hover{filter:brightness(1.12)}
+.btn.ghost{background:var(--card);color:var(--text)}
+.btn.sm{padding:6px 10px;font-size:12px;border-radius:9px}
+.btn:disabled{opacity:.5;cursor:wait}
+.live{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--sec)}
+.live-dot{width:9px;height:9px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.4}}
+.wrap{max-width:1400px;margin:0 auto;padding:18px 20px 90px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.stat .v{font-size:22px;font-weight:800}
+.stat .l{font-size:11.5px;color:var(--sec);margin-top:2px}
+.bar{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:16px}
+.bar-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bar-row+.bar-row{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+select,input[type=text]{padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:13px}
+.tgl{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sec);cursor:pointer;padding:7px 10px;border-radius:9px}
+.tgl:hover{background:var(--card2)}
+.tgl input{accent-color:var(--blue);width:15px;height:15px}
+.tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:9px 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--sec);font-size:13px;font-weight:600;cursor:pointer}
+.tab.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.tab .n{opacity:.6;font-weight:500}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.deal{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:transform .15s;display:flex;flex-direction:column}
+.deal:hover{transform:translateY(-3px)}
+.deal-img{position:relative;aspect-ratio:16/9;background:var(--card2);overflow:hidden}
+.deal-img img{width:100%;height:100%;object-fit:cover;display:block}
+.deal-img .noimg{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:40px;color:var(--mut)}
+.rank{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px}
+.rank.gold{background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000}
+.fav{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:16px;cursor:pointer}
+.fav.on{color:var(--gold)}
+.deal-b{padding:13px 14px;display:flex;flex-direction:column;gap:8px;flex:1}
+.deal-t{font-size:14px;font-weight:700;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--sec)}
+.src{font-weight:800}
+.src.ebay{color:#e53238}.src.kleinanzeigen{color:#22c55e}.src.vinted{color:#14b8a6}.src.facebook{color:#3b82f6}
+.badge{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.b-vb{background:#fef08a;color:#713f12}.b-ab{background:#dbeafe;color:#1e40af}
+.b-free{background:#dcfce7;color:#166534}.b-new{background:#dcfce7;color:#166534}
+.b-def{background:#fee2e2;color:#991b1b}.b-tb{background:var(--card2);color:var(--sec);border:1px solid var(--line)}
+.price{display:flex;align-items:baseline;gap:8px;margin-top:auto}
+.net{font-size:22px;font-weight:800;color:var(--green)}
+.net.mid{color:var(--orange)}
+.calc{font-size:11.5px;color:var(--sec)}
+.deal-f{display:flex;gap:8px;padding:0 14px 14px}
+.deal-f .btn{flex:1;text-align:center;text-decoration:none}
+.tbl-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-top:18px}
+.tbl-h{padding:14px 16px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.tbl-w{overflow:auto;max-height:560px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:920px}
+th{background:var(--card2);padding:10px;text-align:left;position:sticky;top:0;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--sec)}
+td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
+tr:hover td{background:rgba(59,130,246,.06)}
+.mini-img{width:52px;height:40px;object-fit:cover;border-radius:8px;display:block}
+.mback{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;display:none;align-items:center;justify-content:center;padding:18px}
+.mback.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:20px;max-width:640px;width:100%;max-height:88vh;overflow:auto}
+.modal img.hero{width:100%;max-height:300px;object-fit:cover;display:block;background:var(--card2)}
+.m-b{padding:20px}
+.m-b h2{margin:0 0 6px;font-size:19px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:13px;padding:9px 0;border-top:1px dashed var(--line)}
+.kv b{text-align:right}
+.kv.total{font-size:15px}.kv.total b{color:var(--green)}
+.m-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:var(--r);padding:40px 20px;text-align:center;color:var(--sec)}
+.spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:-3px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:11px 20px;border-radius:12px;font-size:13px;font-weight:600;z-index:200;display:none}
+@media print{.top,.bar,.tabs,.deal-f,.m-actions,.no-print{display:none!important}.deal{break-inside:avoid}}
 </style></head><body>
-<header><div style='font-size:20px;font-weight:700'>HAMMERDEALER ULTRA V5 FINAL - Wirklich alles</div><div style='font-size:11px;color:var(--sec)'>Ab 100€ sicher | Ab 50€ extra | Höchste Gewinne | + Tabelle + Filter + Sortierung + Export + Favoriten + alle Kleinigkeiten</div></header>
-<div class='content'>
-
-<div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px'>
-<select id='filterPlattform' class='btn' style='background:var(--gray);color:var(--text)'><option value=''>Alle Portale</option><option value='ebay'>eBay</option><option value='kleinanzeigen'>Kleinanzeigen</option><option value='vinted'>Vinted</option><option value='facebook'>Facebook</option><option value='marktde'>Markt.de</option></select>
-<select id='sortBy' class='btn' style='background:var(--gray);color:var(--text)'><option value='gewinn_desc'>Gewinn absteigend</option><option value='gewinn_asc'>Gewinn aufsteigend</option><option value='entfernung'>Entfernung</option><option value='datum'>Datum</option><option value='plattform'>Plattform</option></select>
-<input id='searchInput' placeholder='Suche z.B. iPhone' style='padding:6px 10px;border-radius:8px;border:1px solid var(--gray);background:var(--card);color:var(--text)'>
-<button class='btn' onclick='exportCSV()'>📥 CSV Export</button>
-<button class='btn' onclick='window.print()'>🖨️ Druck</button>
-<label style='font-size:11px'><input type='checkbox' id='toggleVersand' checked> Mit Versand</label>
-<label style='font-size:11px'><input type='checkbox' id='togglePayPal'> Mit PayPal Gebühren</label>
-<label style='font-size:11px'><input type='checkbox' id='toggleVerpackung' checked> + Verpackung 1,50€</label>
-<label style='font-size:11px'><input type='checkbox' id='toggleVersicherung' checked> + Versicherung 2,50€ ab 100€</label>
-<select id='togglePrivatGewerbe' class='btn' style='background:var(--gray);color:var(--text)'><option value='privat'>Privat (keine MwSt)</option><option value='gewerbe'>Gewerbe (19% MwSt)</option></select>
+<header class='top'><div class='top-in'>
+<div class='logo'><span class='logo-mark'>&#128296;</span><span>HAMMERDEALER<small id='subline'>laedt ...</small></span></div>
+<div class='search'><input id='searchInput' type='text' placeholder='Suche z. B. iPhone, MacBook, Fahrrad ...' autocomplete='off'><button class='btn' id='btnSearch'>Suchen</button></div>
+<div class='live'><span class='live-dot'></span><span id='liveTxt'>verbinde ...</span></div>
+</div></header>
+<div class='wrap'>
+<div class='stats' id='stats'></div>
+<div class='bar'><div class='bar-row'>
+<select id='filterPlattform' title='Portal'><option value=''>Alle Portale</option><option value='ebay'>eBay</option><option value='kleinanzeigen'>Kleinanzeigen</option><option value='vinted'>Vinted</option><option value='facebook'>Facebook</option></select>
+<select id='filterZustand' title='Zustand'><option value=''>Jeder Zustand</option><option value='neu'>Neu</option><option value='gut'>Gut</option><option value='defekt'>Defekt</option></select>
+<select id='filterFlags' title='Merkmale'><option value=''>Alle Merkmale</option><option value='vb'>Nur VB</option><option value='abholung'>Nur Abholung</option><option value='versand'>Mit Versand moeglich</option></select>
+<select id='sortBy' title='Sortierung'><option value='gewinn_desc'>Gewinn absteigend</option><option value='gewinn_asc'>Gewinn aufsteigend</option><option value='roi'>Bestes ROI</option><option value='kauf_asc'>Guenstigster Kauf</option><option value='entfernung'>Naechste zuerst</option><option value='titel'>Titel A-Z</option></select>
+<select id='minGewinn' title='Mindestgewinn'><option value='0'>Ab 0 Euro</option><option value='50' selected>Ab 50 Euro</option><option value='100'>Ab 100 Euro</option><option value='200'>Ab 200 Euro</option></select>
+<button class='btn ghost sm' id='btnFavOnly'>Favoriten</button>
+<button class='btn ghost sm' id='btnCSV'>CSV</button>
+<button class='btn ghost sm' onclick='window.print()'>Druck</button>
+</div><div class='bar-row'>
+<span style='font-size:12px;color:var(--sec);font-weight:700'>Kalkulation:</span>
+<label class='tgl'><input type='checkbox' id='tVersand' checked> Versand</label>
+<label class='tgl'><input type='checkbox' id='tPaypal'> PayPal +1,5 %</label>
+<label class='tgl'><input type='checkbox' id='tVerp' checked> Verpackung 1,50</label>
+<label class='tgl'><input type='checkbox' id='tVers' checked> Versicherung*</label>
+<label class='tgl'><input type='checkbox' id='tMwst'> MwSt 19 % (Gewerbe)</label>
+<span style='font-size:11px;color:var(--mut)'>*2,50 ab 100 Euro Verkaufswert</span>
+</div></div>
+<div class='tabs' id='tabs'>
+<button class='tab on' data-t='alle'>Alle <span class='n' id='nAlle'></span></button>
+<button class='tab' data-t='100'>Ab 100 Euro <span class='n' id='n100'></span></button>
+<button class='tab' data-t='50'>50-99 Euro <span class='n' id='n50'></span></button>
+<button class='tab' data-t='fav'>Favoriten <span class='n' id='nFav'></span></button>
 </div>
-
-<div class='grid3'>
-<div><div style='font-weight:700;margin-bottom:8px'>✅ Ab 100€ sicher</div><div id='col100'></div></div>
-<div><div style='font-weight:700;margin-bottom:8px'>💡 Ab 50€ extra (50-99€)</div><div id='col50'></div></div>
-<div><div style='font-weight:700;margin-bottom:8px'>🏆 Höchste Gewinne Top 10</div><div id='colTop'></div></div>
+<div class='grid' id='grid'></div>
+<div class='tbl-card'><div class='tbl-h'><span>Alle Deals im Detail</span><span style='font-size:11px;color:var(--sec)'>Klick auf Zeile = Details</span></div><div class='tbl-w'><table><thead><tr><th></th><th>Deal</th><th>Portal</th><th>Kauf</th><th>Verkauf</th><th>Netto</th><th>ROI</th><th>Standort</th><th>Status</th></tr></thead><tbody id='tbody'></tbody></table></div></div>
 </div>
-
-<div class='card' style='margin-top:20px'>
-<div style='font-weight:700;margin-bottom:10px'>📊 Gesamt Tabelle - Alle Deals mit allen Spalten</div>
-<div style='overflow:auto;max-height:600px'>
-<table id='gesamtTabelle'><thead><tr><th>★</th><th>Titel</th><th>Plattform</th><th>Zustand</th><th>Standort</th><th>Entfernung</th><th>Kauf</th><th>Verkauf gewrapped</th><th>Abzüge</th><th>Deine Gebühr</th><th>Netto</th><th>ROI</th><th>Badges</th><th>Zeit</th><th>Aktion</th></tr></thead><tbody id='tbody'></tbody></table>
-</div>
-</div>
-
-</div>
+<div class='mback' id='mback'><div class='modal' id='modal'></div></div>
+<div class='toast' id='toast'></div>
 <script>
-let API=localStorage.getItem('HAMMERDEALER_API')||window.location.origin;
-let alleDeals=[];
-let favoriten=JSON.parse(localStorage.getItem('hammerdealer_favoriten')||'[]');
-let notizen=JSON.parse(localStorage.getItem('hammerdealer_notizen')||'{}');
-let statusMap=JSON.parse(localStorage.getItem('hammerdealer_status')||'{}');
-
+var API=(localStorage.getItem('HAMMERDEALER_API')||'').trim()||window.location.origin;
+var alleDeals=[],tab='alle',favOnly=false,scanAt=null,stand='';
+var favoriten=[];try{favoriten=JSON.parse(localStorage.getItem('hammerdealer_favoriten')||'[]')}catch(e){favoriten=[]}
+var notizen={};try{notizen=JSON.parse(localStorage.getItem('hammerdealer_notizen')||'{}')}catch(e){notizen={}}
+var statusMap={};try{statusMap=JSON.parse(localStorage.getItem('hammerdealer_status')||'{}')}catch(e){statusMap={}}
+function $(id){return document.getElementById(id)}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function eur(n){n=Number(n)||0;return n.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' Euro'}
+function zeitSeit(){if(!scanAt)return'';var s=Math.max(0,Math.round((Date.now()-scanAt)/1000));if(s<60)return'vor '+s+' Sek';var m=Math.floor(s/60);if(m<60)return'vor '+m+' Min';return'vor '+Math.floor(m/60)+' Std'}
+function toast(t){var e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(function(){e.style.display='none'},2200)}
+function opts(){return{versand:$('tVersand').checked,paypal:$('tPaypal').checked,verp:$('tVerp').checked,vers:$('tVers').checked,mwst:$('tMwst').checked}}
+function calc(d,o){
+ var kauf=Number(d.kaufpreis_gesamt!=null?d.kaufpreis_gesamt:d.kaufpreis)||0;
+ var verk=Number(d.verkaufswert)||0;
+ var a=d.abzuege||{};
+ var verkGeb=Number(a.verkaufsgebuehr)||0, zahlGeb=Number(a.zahlungsgebuehr)||0;
+ var versV=o.versand?(Number(a.versand_verkauf!=null?a.versand_verkauf:a.versand)||0):0;
+ var versE=o.versand?(Number(a.versand_einkauf)||0):0;
+ var fix=Number(a.fix)||0, rueck=Number(a.rueckgabe_puffer)||0, sich=Number(a.sicherheit_puffer)||0;
+ var verp=o.verp?1.5:0, versi=(o.vers&&verk>=100)?2.5:0, pp=o.paypal?Math.round(verk*0.015*100)/100:0;
+ var mwst=o.mwst?Math.round(verk*0.19*100)/100:0;
+ var ab=verkGeb+zahlGeb+versV+fix+rueck+sich+verp+versi+pp+mwst;
+ var kaufG=kauf+versE, brutto=verk-kaufG-ab;
+ var p=brutto<=100?2:brutto<=300?3:4, prov=Math.round(brutto*p)/100;
+ var netto=Math.round((brutto-prov)*100)/100;
+ var roi=kaufG>0?Math.round(netto/kaufG*1000)/10:null;
+ return{kaufG:kaufG,verk:verk,ab:ab,brutto:Math.round(brutto*100)/100,prov:prov,netto:netto,roi:roi,
+ extra:{verp:verp,versi:versi,pp:pp,mwst:mwst,versV:versV,versE:versE,verkGeb:verkGeb,zahlGeb:zahlGeb,fix:fix,rueck:rueck,sich:sich}};
+}
+function srcName(p){return{ebay:'eBay',kleinanzeigen:'Kleinanzeigen',vinted:'Vinted',facebook:'Facebook'}[p]||p}
+function srcIcon(p){return{ebay:'E',kleinanzeigen:'K',vinted:'V',facebook:'f'}[p]||'? '}
+function badges(d){
+ var h='';
+ if(d.vb)h+="<span class='badge b-vb'>VB</span>";
+ if(d.nur_abholung)h+="<span class='badge b-ab'>Abholung</span>";
+ if(d.abzuege&&d.abzuege.zu_verschenken)h+="<span class='badge b-free'>Gratis</span>";
+ var z=(d.zustand||'gut').toLowerCase();
+ if(z==='neu')h+="<span class='badge b-new'>Neu</span>";else if(z==='defekt')h+="<span class='badge b-def'>Defekt</span>";
+ else h+="<span class='badge b-tb'>"+esc(d.zustand||'gut')+"</span>";
+ return h;
+}
+function imgFail(el){el.style.display='none';var f=el.parentNode.querySelector('.imgfb');if(f)f.style.display='flex'}
+function imgHTML(d,cls){
+ var s=cls==='mini'?"width:52px;height:40px":'width:100%;height:100%';
+ if(!d.bild)return"<div class='noimg'>&#128247;</div>";
+ return"<img src='"+d.bild+"' loading='lazy' referrerpolicy='no-referrer' style='"+s+";object-fit:cover;display:block' onerror='imgFail(this)'><div class='noimg imgfb' style='display:none'>&#128247;</div>";
+}
 async function lade(){
+ var q=($('searchInput').value||'iPhone').trim()||'iPhone';
+ var btn=$('btnSearch');btn.disabled=true;btn.innerHTML='<span class="spin"></span> Suche';
+ $('grid').innerHTML="<div class='empty'>Suche laeuft ...</div>";
  try{
-  let r=await fetch(API+'/api/deals?q='+(document.getElementById('searchInput').value||'iPhone')+'&min_gewinn=50&reichweite=200');
-  let d=await r.json();
-  alleDeals=d.deals.sort((a,b)=>b.gewinn_netto-a.gewinn_netto);
+  var r=await fetch(API+'/api/deals?q='+encodeURIComponent(q)+'&min_gewinn=0&reichweite=200');
+  if(!r.ok)throw new Error('Server '+r.status);
+  var d=await r.json();
+  alleDeals=(d.deals||[]).map(function(x){x._c=calc(x,opts());return x});
+  scanAt=Date.now();stand=d.stand||'';
+  $('liveTxt').textContent='live - '+alleDeals.length+' Deals';
+  $('subline').textContent=(stand||zeitSeit())+' - '+alleDeals.length+' Deals';
   render();
  }catch(e){
-  document.getElementById('col100').innerHTML=`Fehler ${e}`;
+  $('liveTxt').textContent='offline';
+  $('grid').innerHTML="<div class='empty'>Fehler: "+esc(e.message||e)+"<br><br><button class='btn' onclick='lade()'>Erneut versuchen</button></div>";
  }
+ btn.disabled=false;btn.textContent='Suchen';
 }
-
+function gefiltert(){
+ var o=opts(),fp=$('filterPlattform').value,fz=$('filterZustand').value,ff=$('filterFlags').value;
+ var mg=Number($('minGewinn').value)||0,sb=$('sortBy').value;
+ var l=alleDeals.map(function(d){d._c=calc(d,o);return d});
+ if(fp)l=l.filter(function(x){return x.plattform===fp});
+ if(fz)l=l.filter(function(x){return(x.zustand||'gut').toLowerCase()===fz});
+ if(ff==='vb')l=l.filter(function(x){return x.vb});
+ if(ff==='abholung')l=l.filter(function(x){return x.nur_abholung});
+ if(ff==='versand')l=l.filter(function(x){return!x.nur_abholung});
+ if(tab==='100')l=l.filter(function(x){return x._c.netto>=100});
+ if(tab==='50')l=l.filter(function(x){return x._c.netto>=50&&x._c.netto<100});
+ if(tab==='fav'||favOnly)l=l.filter(function(x){return favoriten.indexOf(x.id)>=0});
+ l=l.filter(function(x){return x._c.netto>=mg});
+ if(sb==='gewinn_desc')l.sort(function(a,b){return b._c.netto-a._c.netto});
+ else if(sb==='gewinn_asc')l.sort(function(a,b){return a._c.netto-b._c.netto});
+ else if(sb==='roi')l.sort(function(a,b){return(b._c.roi||-1)-(a._c.roi||-1)});
+ else if(sb==='kauf_asc')l.sort(function(a,b){return a._c.kaufG-b._c.kaufG});
+ else if(sb==='entfernung')l.sort(function(a,b){return(a.entfernung_km==null?9999:a.entfernung_km)-(b.entfernung_km==null?9999:b.entfernung_km)});
+ else if(sb==='titel')l.sort(function(a,b){return String(a.titel).localeCompare(String(b.titel))});
+ return l;
+}
 function render(){
- let filterPlatt=document.getElementById('filterPlattform').value;
- let sortBy=document.getElementById('sortBy').value;
- let filtered=alleDeals.filter(x=>!filterPlatt || x.plattform===filterPlatt);
- 
- if(sortBy==='gewinn_desc') filtered.sort((a,b)=>b.gewinn_netto-a.gewinn_netto);
- if(sortBy==='gewinn_asc') filtered.sort((a,b)=>a.gewinn_netto-b.gewinn_netto);
- if(sortBy==='entfernung') filtered.sort((a,b)=>(a.entfernung_km||999)-(b.entfernung_km||999));
- if(sortBy==='datum') filtered.sort((a,b)=>new Date(b.datum_iso||b.datum)-new Date(a.datum_iso||a.datum));
- if(sortBy==='plattform') filtered.sort((a,b)=>a.plattform.localeCompare(b.plattform));
- 
- // Spalten
- let ab100=filtered.filter(x=>x.gewinn_netto>=100);
-  document.getElementById('col100').innerHTML=ab100.map(x=>card(x)).join('')||'<div class=card>Keine</div>';
- let ab50=filtered.filter(x=>x.gewinn_netto>=50 && x.gewinn_netto<100);
- document.getElementById('col50').innerHTML=ab50.map(x=>card(x,'orange')).join('')||'<div class=card>Keine 50-99</div>';
- let top=filtered.slice(0,10);
- document.getElementById('colTop').innerHTML=top.map((x,i)=>cardTop(x,i)).join('')||'<div class=card>Keine</div>';
- 
- // Tabelle
- let tbody=document.getElementById('tbody');
- tbody.innerHTML=filtered.map(x=>`<tr>
-<td><span style='cursor:pointer' onclick='toggleFav("${x.id}")'>${favoriten.includes(x.id)?'★':'☆'}</span></td>
-<td><div style='font-weight:600'>${x.titel}</div><div style='font-size:10px;margin:4px 0'>${imgTag(x,80)}</div><div style='font-size:10px'>Notiz: <input value='${notizen[x.id]||''}' onchange='setNotiz("${x.id}",this.value)' placeholder='Notiz' style='width:80px'></div></td>
-<td>${x.plattform} ${x.plattform==='ebay'?'🛒':x.plattform==='kleinanzeigen'?'📦':'👕'}</td>
-<td><span class='badge ${x.zustand==='neu'?'badge-zustand-neu':x.zustand==='defekt'?'badge-zustand-defekt':''}' style='background:var(--gray)'>${x.zustand||'gut'}</span></td>
-<td>${x.standort||''} ${x.entfernung_km?`<a href='https://maps.google.com/?q=${x.entfernung_km}km' target='_blank'>📍 Maps</a>`:''}</td>
-<td>${x.entfernung_km?x.entfernung_km+'km':''}</td>
-<td>${x.kaufpreis_gesamt||x.kaufpreis}€<br><small>+Versand ${x.abzuege?.versand_einkauf||0}€</small></td>
-<td>${x.verkaufswert}€<br><small>${x.verkaufswert_quelle||'gewrapped'}</small></td>
-<td><small>Verk ${x.abzuege?.verkaufsgebuehr||0}€<br>Zahl ${x.abzuege?.zahlungsgebuehr||0}€<br>Vers ${x.abzuege?.versand_verkauf||x.abzuege?.versand||0}€<br>Rück ${x.abzuege?.rueckgabe_puffer||0}€<br>Sich ${x.abzuege?.sicherheit_puffer||5}€<br>= ${x.abzuege?.gesamt_plattform||''}€</small></td>
-<td>${x.deine_gebuehr?.betrag||x.provision}€ (${x.deine_gebuehr?.prozent||x.prozent}%)</td>
-<td><b style='color:${x.gewinn_netto>=100?'#34c759':'#FF9500'}'>${x.gewinn_netto}€</b><br><small>Brutto ${x.gewinn_brutto}€</small></td>
-<td>${x.roi_prozent||''}%</td>
-<td>${x.vb?'<span class=badge-vb>VB</span>':''} ${x.nur_abholung?'<span class=badge-abholung>Nur Abholung</span>':''} ${x.abzuege?.zu_verschenken?'<span class=badge-verschenkt>Zu verschenken</span>':''} ${x.bild?'<span class=badge>📷 Bild</span>':''}</td>
-<td><small>vor 5 Min<br>${x.datum||''}</small></td>
-<td><select onchange='setStatus("${x.id}",this.value)'><option value='offen' ${statusMap[x.id]==='offen'?'selected':''}>offen</option><option value='gekauft' ${statusMap[x.id]==='gekauft'?'selected':''}>gekauft</option><option value='verkauft' ${statusMap[x.id]==='verkauft'?'selected':''}>verkauft</option><option value='retour'>retour</option></select><br><button class='btn' onclick='teilen("${x.id}")'>Teilen</button></td>
-</tr>`).join('');
+ var l=gefiltert(),o=opts();
+ var n100=alleDeals.filter(function(x){return calc(x,o).netto>=100}).length;
+ var n50=alleDeals.filter(function(x){var n=calc(x,o).netto;return n>=50&&n<100}).length;
+ $('nAlle').textContent='('+alleDeals.length+')';$('n100').textContent='('+n100+')';
+ $('n50').textContent='('+n50+')';$('nFav').textContent='('+favoriten.length+')';
+ var top=l.length?l[0]._c.netto:0,avg=l.length?Math.round(l.reduce(function(s,x){return s+x._c.netto},0)/l.length):0;
+ $('stats').innerHTML=
+  "<div class='stat'><div class='v'>"+l.length+"</div><div class='l'>Deals (Filter)</div></div>"+
+  "<div class='stat'><div class='v' style='color:var(--green)'>"+eur(top)+"</div><div class='l'>Top-Gewinn</div></div>"+
+  "<div class='stat'><div class='v'>"+eur(avg)+"</div><div class='l'>Durchschnitt</div></div>"+
+  "<div class='stat'><div class='v'>"+esc(zeitSeit()||'-')+"</div><div class='l'>Stand "+esc(stand||'')+"</div></div>";
+ if(!l.length){$('grid').innerHTML="<div class='empty'>Keine Deals. Suche oder Filter anpassen.</div>"}
+ else{$('grid').innerHTML=l.map(cardHTML).join('')}
+ $('tbody').innerHTML=l.map(rowHTML).join('');
 }
-
-function imgFail(el){ el.style.display='none'; var fb=el.nextElementSibling; if(fb) fb.style.display='flex'; }
-
-function imgPh(size){
- return `<div style='width:${size}px;height:${size}px;border-radius:8px;background:var(--gray);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0'>📷</div>`;
+function cardHTML(d,i){
+ var c=d._c,fav=favoriten.indexOf(d.id)>=0;
+ var maps=d.standort?"<a href='https://maps.google.com/?q="+encodeURIComponent(d.standort)+"' target='_blank' rel='noopener'>"+esc(d.standort)+"</a>":'-';
+ return"<div class='deal' onclick='openModal(\""+d.id+"\")'>"+
+ "<div class='deal-img'>"+imgHTML(d)+"<span class='rank"+(i<3?' gold':'')+"'>#"+(i+1)+"</span>"+
+ "<button class='fav"+(fav?' on':'')+"' onclick='event.stopPropagation();toggleFav(\""+d.id+"\")'>"+(fav?'&#9733;':'&#9734;')+"</button></div>"+
+ "<div class='deal-b'><div class='deal-t'>"+esc(d.titel)+"</div>"+
+ "<div class='meta'><span class='src "+d.plattform+"'>"+srcIcon(d.plattform)+" "+srcName(d.plattform)+"</span><span>"+maps+"</span>"+(d.entfernung_km!=null?"<span>"+d.entfernung_km+" km</span>":'')+"</div>"+
+ "<div class='meta'>"+badges(d)+"</div>"+
+ "<div class='price'><span class='net"+(c.netto<100?' mid':'')+"'>"+eur(c.netto)+"</span><span class='calc'>Kauf "+eur(c.kaufG)+" - Verkauf "+eur(c.verk)+"</span></div>"+
+ "<div class='calc'>"+(c.roi!=null?"ROI "+c.roi+" % - ":'')+"Stand "+esc(d.datum||'')+"</div></div>"+
+ "<div class='deal-f'><a class='btn' href='"+esc(d.link||'#')+"' target='_blank' rel='noopener' onclick='event.stopPropagation()'>Ansehen</a>"+
+ "<button class='btn ghost' onclick='event.stopPropagation();teilen(\""+d.id+"\")'>Teilen</button></div></div>";
 }
-
-function imgTag(d,size){
- size=size||64;
- if(!d.bild) return imgPh(size);
- return `<span style='display:inline-flex;flex-shrink:0'><img src='${d.bild}' loading='lazy' referrerpolicy='no-referrer' style='width:${size}px;height:${size}px;object-fit:cover;border-radius:8px' onerror='imgFail(this)'><span style='display:none;width:${size}px;height:${size}px;border-radius:8px;background:var(--gray);align-items:center;justify-content:center;font-size:20px'>📷</span></span>`;
+function rowHTML(d){
+ var c=d._c,fav=favoriten.indexOf(d.id)>=0,st=statusMap[d.id]||'offen';
+ return"<tr onclick='openModal(\""+d.id+"\")'><td><span style='cursor:pointer;font-size:16px' onclick='event.stopPropagation();toggleFav(\""+d.id+"\")'>"+(fav?'&#9733;':'&#9734;')+"</span></td>"+
+ "<td><div style='display:flex;gap:8px;align-items:center'><span style='flex-shrink:0'>"+imgHTML(d,'mini').replace(/width:100%;height:100%/g,'width:52px;height:40px').replace(/class='noimg'/g,"class='noimg' style='width:52px;height:40px;font-size:18px'")+"</span><b>"+esc(d.titel)+"</b></div></td>"+
+ "<td><span class='src "+d.plattform+"'>"+srcName(d.plattform)+"</span></td>"+
+ "<td>"+eur(c.kaufG)+"</td><td>"+eur(c.verk)+"</td>"+
+ "<td><b style='color:"+(c.netto>=100?'var(--green)':'var(--orange)')+"'>"+eur(c.netto)+"</b></td>"+
+ "<td>"+(c.roi!=null?c.roi+' %':'-')+"</td><td>"+esc(d.standort||'-')+"</td><td>"+esc(st)+"</td></tr>";
 }
-
-function card(d,color){
- return `<div class='card' style='border-left:4px solid ${color||'#34c759'}'><div style='display:flex;gap:8px'>${imgTag(d,64)}<div><div style='font-size:13px;font-weight:600'>${d.titel} ${d.vb?'<span class=badge-vb>VB</span>':''} ${d.nur_abholung?'<span class=badge-abholung>Abholung</span>':''}</div><div style='font-size:11px;color:#86868b'>Kauf ${d.kaufpreis_gesamt||d.kaufpreis}€ → Verkauf ${d.verkaufswert}€<br>Netto <b>${d.gewinn_netto}€</b> - ${d.plattform} ${d.entfernung_km?`📍${d.entfernung_km}km`:''} - ${d.zustand||''}</div></div></div></div>`;
+function openModal(id){
+ var d=null;for(var i=0;i<alleDeals.length;i++){if(alleDeals[i].id===id)d=alleDeals[i]}
+ if(!d)return;var c=d._c,e=c.extra;
+ var maps=d.standort?"<a href='https://maps.google.com/?q="+encodeURIComponent(d.standort+(d.entfernung_km!=null?'':'') )+"' target='_blank' rel='noopener'>In Maps oeffnen</a>":'-';
+ $('modal').innerHTML=(d.bild?"<img class='hero' src='"+d.bild+"' referrerpolicy='no-referrer' onerror='this.style.display=\\'none\\''>":'')+
+ "<div class='m-b'><h2>"+esc(d.titel)+"</h2>"+
+ "<div class='meta'><span class='src "+d.plattform+"'>"+srcName(d.plattform)+"</span><span>"+esc(d.zustand||'')+"</span><span>"+esc(d.standort||'')+"</span>"+(d.entfernung_km!=null?"<span>"+d.entfernung_km+" km</span>":'')+"</div>"+
+ "<div class='meta' style='margin-top:6px'>"+badges(d)+"</div>"+
+ "<div class='kv'><span>Einkaufspreis</span><b>"+eur(d.kaufpreis)+"</b></div>"+
+ "<div class='kv'><span>+ Einkauf-Versand</span><b>"+eur(e.extra.versE)+"</b></div>"+
+ "<div class='kv'><span>= Wareneinsatz</span><b>"+eur(c.kaufG)+"</b></div>"+
+ "<div class='kv'><span>Verkaufserloes</span><b>"+eur(c.verk)+"</b></div>"+
+ "<div class='kv'><span>- Verkaufsgebuehr</span><b>"+eur(e.verkGeb)+"</b></div>"+
+ "<div class='kv'><span>- Zahlungsgebuehr</span><b>"+eur(e.zahlGeb)+"</b></div>"+
+ "<div class='kv'><span>- Versand Verkauf</span><b>"+eur(e.versV)+"</b></div>"+
+ "<div class='kv'><span>- Verpackung / Versicherung / PayPal / MwSt</span><b>"+eur(e.verp+e.versi+e.pp+e.mwst)+"</b></div>"+
+ "<div class='kv'><span>- Fix + Puffer</span><b>"+eur(e.fix+e.rueck+e.sich)+"</b></div>"+
+ "<div class='kv'><span>= Brutto</span><b>"+eur(c.brutto)+"</b></div>"+
+ "<div class='kv'><span>- Deine Gebuehr ("+(c.brutto<=100?'2':c.brutto<=300?'3':'4')+" %)</span><b>"+eur(c.prov)+"</b></div>"+
+ "<div class='kv total'><span>Netto-Gewinn"+(c.roi!=null?" (ROI "+c.roi+" %)":'')+"</span><b>"+eur(c.netto)+"</b></div>"+
+ "<div class='kv'><span>Standort</span><b>"+maps+"</b></div>"+
+ "<div class='kv'><span>Link</span><b><a href='"+esc(d.link||'#')+"' target='_blank' rel='noopener'>Angebot oeffnen</a></b></div>"+
+ "<div class='kv'><span>Notiz</span><b><input id='mNotiz' type='text' value='"+esc(notizen[d.id]||'')+"' placeholder='Notiz ...' style='width:180px'></b></div>"+
+ "<div class='kv'><span>Status</span><b><select id='mStatus'>"+['offen','gekauft','verkauft','retour'].map(function(s){return"<option value='"+s+"'"+(statusMap[d.id]===s?' selected':'')+">"+s+"</option>"}).join('')+"</select></b></div>"+
+ "<div class='m-actions no-print'><a class='btn' href='"+esc(d.link||'#')+"' target='_blank' rel='noopener'>Angebot oeffnen</a>"+
+ "<button class='btn ghost' onclick='teilen(\""+d.id+"\")'>Teilen</button>"+
+ "<button class='btn ghost' onclick='saveModal(\""+d.id+"\")'>Speichern</button>"+
+ "<button class='btn ghost' onclick='closeModal()'>Schliessen</button></div></div>";
+ $('mback').classList.add('open');
 }
-function cardTop(d,i){
- return `<div class='card' style='border-left:4px solid ${i==0?'#FFD700':i<3?'#C0C0C0':'#CD7F32'}'><div style='display:flex;gap:8px'>${imgTag(d,56)}<div><div style='font-size:13px;font-weight:600'>#${i+1} ${d.titel}</div><div style='font-size:11px'>Netto <b>${d.gewinn_netto}€</b> - Kauf ${d.kaufpreis}€ → Verkauf ${d.verkaufswert}€ - ROI ${d.roi_prozent||''}%</div></div></div></div>`;
+function saveModal(id){notizen[id]=$('mNotiz').value;statusMap[id]=$('mStatus').value;
+ try{localStorage.setItem('hammerdealer_notizen',JSON.stringify(notizen));localStorage.setItem('hammerdealer_status',JSON.stringify(statusMap))}catch(e){}
+ toast('Gespeichert');render()}
+function closeModal(){$('mback').classList.remove('open')}
+function toggleFav(id){var i=favoriten.indexOf(id);if(i>=0)favoriten.splice(i,1);else favoriten.push(id);
+ try{localStorage.setItem('hammerdealer_favoriten',JSON.stringify(favoriten))}catch(e){}render()}
+function teilen(id){var d=null;for(var i=0;i<alleDeals.length;i++){if(alleDeals[i].id===id)d=alleDeals[i]}if(!d)return;
+ var t='Deal: '+d.titel+' - Kauf '+eur(d._c.kaufG)+' - Verkauf '+eur(d._c.verk)+' - Netto '+eur(d._c.netto)+' - '+d.link;
+ if(navigator.share){navigator.share({title:d.titel,text:t,url:d.link}).catch(function(){})} 
+ else if(navigator.clipboard){navigator.clipboard.writeText(t);toast('Link kopiert')}else{prompt('Link kopieren:',t)}}
+function exportCSV(){var l=gefiltert();if(!l.length){toast('Keine Deals');return}
+ var h='Titel;Plattform;Zustand;Standort;Kauf;Verkauf;Netto;ROI;Link\n';
+ var b=l.map(function(d){return'"'+String(d.titel).replace(/"/g,'""')+'";'+d.plattform+';'+(d.zustand||'')+';'+(d.standort||'')+';'+d._c.kaufG+';'+d._c.verk+';'+d._c.netto+';'+(d._c.roi==null?'':d._c.roi)+';'+d.link}).join('\n');
+ var u=URL.createObjectURL(new Blob(['\ufeff'+h+b],{type:'text/csv;charset=utf-8'}));
+ var a=document.createElement('a');a.href=u;a.download='hammerdealer.csv';a.click();setTimeout(function(){URL.revokeObjectURL(u)},2000)}
+var deb=null;
+function bind(){
+ $('btnSearch').onclick=lade;
+ $('searchInput').addEventListener('keydown',function(e){if(e.key==='Enter')lade()});
+ $('searchInput').addEventListener('input',function(){clearTimeout(deb);deb=setTimeout(lade,700)});
+ $('filterPlattform').onchange=render;$('filterZustand').onchange=render;$('filterFlags').onchange=render;
+ $('sortBy').onchange=render;$('minGewinn').onchange=lade;
+ $('tVersand').onchange=render;$('tPaypal').onchange=render;$('tVerp').onchange=render;$('tVers').onchange=render;$('tMwst').onchange=render;
+ var ts=document.querySelectorAll('#tabs .tab');
+ for(var i=0;i<ts.length;i++){ts[i].onclick=function(){for(var j=0;j<ts.length;j++)ts[j].classList.remove('on');this.classList.add('on');tab=this.getAttribute('data-t');favOnly=false;$('btnFavOnly').textContent='Favoriten';render()}}
+ $('btnFavOnly').onclick=function(){favOnly=!favOnly;this.textContent=favOnly?'★ Favoriten':'Favoriten';this.classList.toggle('on',favOnly);render()};
+ $('btnCSV').onclick=exportCSV;
+ $('mback').addEventListener('click',function(e){if(e.target===this)closeModal()});
+ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()});
+ setInterval(function(){if(scanAt){var s=$('subline');if(s)s.textContent=(stand||'')+' - '+alleDeals.length+' Deals ('+zeitSeit()+')'}},30000);
 }
-function toggleFav(id){ if(favoriten.includes(id)) favoriten=favoriten.filter(x=>x!==id); else favoriten.push(id); localStorage.setItem('hammerdealer_favoriten',JSON.stringify(favoriten)); render(); }
-function setNotiz(id,val){ notizen[id]=val; localStorage.setItem('hammerdealer_notizen',JSON.stringify(notizen)); }
-function setStatus(id,val){ statusMap[id]=val; localStorage.setItem('hammerdealer_status',JSON.stringify(statusMap)); }
-function teilen(id){ let d=alleDeals.find(x=>x.id===id); let text=`Deal: ${d.titel} - Kauf ${d.kaufpreis}€ - Verkauf ${d.verkaufswert}€ - Netto ${d.gewinn_netto}€ - ${d.link}`; if(navigator.share){navigator.share({title:d.titel,text:text,url:d.link})} else {navigator.clipboard.writeText(text); alert('Link kopiert: '+text);} }
-function exportCSV(){ let csv='Titel,Plattform,Zustand,Standort,Entfernung,Kauf,Verkauf,Gewinn Netto,ROI,Link\n'+alleDeals.map(d=>`"${d.titel}","${d.plattform}","${d.zustand}","${d.standort}","${d.entfernung_km}","${d.kaufpreis}","${d.verkaufswert}","${d.gewinn_netto}","${d.roi_prozent}","${d.link}"`).join('\n'); let blob=new Blob([csv],{type:'text/csv'}); let url=URL.createObjectURL(blob); let a=document.createElement('a'); a.href=url; a.download='hammerdealer_deals.csv'; a.click(); }
-document.getElementById('filterPlattform').addEventListener('change',render);
-document.getElementById('sortBy').addEventListener('change',render);
-document.getElementById('searchInput').addEventListener('input',()=>{setTimeout(lade,500)});
-lade();
+bind();lade();
 </script></body></html>
