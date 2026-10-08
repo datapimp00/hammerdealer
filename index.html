@@ -4,6 +4,11 @@
 <meta name='description' content='Findet profitable Deals auf eBay, Kleinanzeigen, Vinted und Facebook.'>
 <link rel='manifest' href='manifest.json'>
 <meta name='theme-color' content='#0a0a0f'>
+<link rel='icon' type='image/png' href='favicon-32.png'>
+<link rel='apple-touch-icon' href='apple-touch-icon.png'>
+<meta property='og:title' content='HAMMERDEALER - Deals ab 100 Euro Gewinn'>
+<meta property='og:description' content='Profitable Deals auf eBay, Kleinanzeigen, Vinted und Facebook - mit echter Gewinnberechnung.'>
+<meta property='og:type' content='website'>
 <style>
 *{box-sizing:border-box}
 :root{--bg:#0a0a0f;--card:#17171f;--card2:#1e1e28;--line:rgba(255,255,255,.09);
@@ -100,7 +105,7 @@ tr:hover td{background:rgba(59,130,246,.06)}
 </style></head><body>
 <header class='top'><div class='top-in'>
 <div class='logo'><span class='logo-mark'>&#128296;</span><span>HAMMERDEALER<small id='subline'>laedt ...</small></span></div>
-<div class='search'><input id='searchInput' type='text' placeholder='Suche z. B. iPhone, MacBook, Fahrrad ...' autocomplete='off'><button class='btn' id='btnSearch'>Suchen</button></div>
+<div class='search'><input id='searchInput' type='text' list='suchverlauf' placeholder='Suche z. B. iPhone, MacBook, Fahrrad ...' autocomplete='off'><datalist id='suchverlauf'></datalist><button class='btn' id='btnSearch'>Suchen</button></div>
 <div class='live'><span class='live-dot'></span><span id='liveTxt'>verbinde ...</span></div>
 </div></header>
 <div class='wrap'>
@@ -110,6 +115,7 @@ tr:hover td{background:rgba(59,130,246,.06)}
 <select id='filterZustand' title='Zustand'><option value=''>Jeder Zustand</option><option value='neu'>Neu</option><option value='gut'>Gut</option><option value='defekt'>Defekt</option></select>
 <select id='filterFlags' title='Merkmale'><option value=''>Alle Merkmale</option><option value='vb'>Nur VB</option><option value='abholung'>Nur Abholung</option><option value='versand'>Mit Versand moeglich</option></select>
 <select id='sortBy' title='Sortierung'><option value='gewinn_desc'>Gewinn absteigend</option><option value='gewinn_asc'>Gewinn aufsteigend</option><option value='roi'>Bestes ROI</option><option value='kauf_asc'>Guenstigster Kauf</option><option value='entfernung'>Naechste zuerst</option><option value='titel'>Titel A-Z</option></select>
+<select id='selReichweite' title='Reichweite'><option value='200'>Umkreis 200 km</option><option value='100'>Umkreis 100 km</option><option value='50' selected>Umkreis 50 km</option><option value='25'>Umkreis 25 km</option><option value='10'>Umkreis 10 km</option></select>
 <select id='minGewinn' title='Mindestgewinn'><option value='0'>Ab 0 Euro</option><option value='50' selected>Ab 50 Euro</option><option value='100'>Ab 100 Euro</option><option value='200'>Ab 200 Euro</option></select>
 <button class='btn ghost sm' id='btnFavOnly'>Favoriten</button>
 <button class='btn ghost sm' id='btnCSV'>CSV</button>
@@ -132,6 +138,7 @@ tr:hover td{background:rgba(59,130,246,.06)}
 <div class='grid' id='grid'></div>
 <div class='tbl-card'><div class='tbl-h'><span>Alle Deals im Detail</span><span style='font-size:11px;color:var(--sec)'>Klick auf Zeile = Details</span></div><div class='tbl-w'><table><thead><tr><th></th><th>Deal</th><th>Portal</th><th>Kauf</th><th>Verkauf</th><th>Netto</th><th>ROI</th><th>Standort</th><th>Status</th></tr></thead><tbody id='tbody'></tbody></table></div></div>
 </div>
+<footer style='max-width:1400px;margin:30px auto 0;padding:18px 20px;font-size:12px;color:var(--sec);display:flex;gap:16px;flex-wrap:wrap;justify-content:center'><span>HAMMERDEALER - alle Angaben ohne Gewaehr</span><a href='/impressum.html'>Impressum</a><a href='/datenschutz.html'>Datenschutz</a><button class='btn ghost sm' id='btnAlarm'>Deal-Alarm: Aus</button></footer>
 <div class='mback' id='mback'><div class='modal' id='modal'></div></div>
 <div class='toast' id='toast'></div>
 <script>
@@ -184,10 +191,12 @@ function imgHTML(d,cls){
 }
 async function lade(){
  var q=($('searchInput').value||'iPhone').trim()||'iPhone';
+ var rw=$('selReichweite')?$('selReichweite').value:'50';
+ try{var hh=JSON.parse(localStorage.getItem('hd_history')||'[]');hh=hh.filter(function(x){return x!==q});hh.unshift(q);hh=hh.slice(0,8);localStorage.setItem('hd_history',JSON.stringify(hh));renderHistory()}catch(e){}
  var btn=$('btnSearch');btn.disabled=true;btn.innerHTML='<span class="spin"></span> Suche';
  $('grid').innerHTML="<div class='empty'>Suche laeuft ...</div>";
  try{
-  var r=await fetch(API+'/api/deals?q='+encodeURIComponent(q)+'&min_gewinn=0&reichweite=200');
+  var r=await fetch(API+'/api/deals?q='+encodeURIComponent(q)+'&min_gewinn=0&reichweite='+encodeURIComponent(rw));
   if(!r.ok)throw new Error('Server '+r.status);
   var d=await r.json();
   alleDeals=(d.deals||[]).map(function(x){x._c=calc(x,opts());return x});
@@ -237,6 +246,7 @@ function render(){
  if(!l.length){$('grid').innerHTML="<div class='empty'>Keine Deals. Suche oder Filter anpassen.</div>"}
  else{$('grid').innerHTML=l.map(cardHTML).join('')}
  $('tbody').innerHTML=l.map(rowHTML).join('');
+ checkAlarm();
 }
 function cardHTML(d,i){
  var c=d._c,fav=favoriten.indexOf(d.id)>=0;
@@ -253,13 +263,13 @@ function cardHTML(d,i){
  "<button class='btn ghost' onclick='event.stopPropagation();teilen(\""+d.id+"\")'>Teilen</button></div></div>";
 }
 function rowHTML(d){
- var c=d._c,fav=favoriten.indexOf(d.id)>=0,st=statusMap[d.id]||'offen';
+ var c=d._c,fav=favoriten.indexOf(d.id)>=0,st=statusMap[d.id]||'offen',nt=notizen[d.id]||'';
  return"<tr onclick='openModal(\""+d.id+"\")'><td><span style='cursor:pointer;font-size:16px' onclick='event.stopPropagation();toggleFav(\""+d.id+"\")'>"+(fav?'&#9733;':'&#9734;')+"</span></td>"+
  "<td><div style='display:flex;gap:8px;align-items:center'><span style='flex-shrink:0'>"+imgHTML(d,'mini').replace(/width:100%;height:100%/g,'width:52px;height:40px').replace(/class='noimg'/g,"class='noimg' style='width:52px;height:40px;font-size:18px'")+"</span><b>"+esc(d.titel)+"</b></div></td>"+
  "<td><span class='src "+d.plattform+"'>"+srcName(d.plattform)+"</span></td>"+
  "<td>"+eur(c.kaufG)+"</td><td>"+eur(c.verk)+"</td>"+
  "<td><b style='color:"+(c.netto>=100?'var(--green)':'var(--orange)')+"'>"+eur(c.netto)+"</b></td>"+
- "<td>"+(c.roi!=null?c.roi+' %':'-')+"</td><td>"+esc(d.standort||'-')+"</td><td>"+esc(st)+"</td></tr>";
+ "<td>"+(c.roi!=null?c.roi+' %':'-')+"</td><td>"+esc(d.standort||'-')+"</td><td>"+(nt?esc(nt):'-')+" / "+esc(st)+"</td></tr>";
 }
 function openModal(id){
  var d=null;for(var i=0;i<alleDeals.length;i++){if(alleDeals[i].id===id)d=alleDeals[i]}
@@ -301,6 +311,10 @@ function teilen(id){var d=null;for(var i=0;i<alleDeals.length;i++){if(alleDeals[
  var t='Deal: '+d.titel+' - Kauf '+eur(d._c.kaufG)+' - Verkauf '+eur(d._c.verk)+' - Netto '+eur(d._c.netto)+' - '+d.link;
  if(navigator.share){navigator.share({title:d.titel,text:t,url:d.link}).catch(function(){})} 
  else if(navigator.clipboard){navigator.clipboard.writeText(t);toast('Link kopiert')}else{prompt('Link kopieren:',t)}}
+function renderHistory(){try{var h=JSON.parse(localStorage.getItem('hd_history')||'[]');var dl=$('suchverlauf');if(dl)dl.innerHTML=h.map(function(x){return'<option value="'+esc(x)+'">'}).join('')}catch(e){}}
+function renderAlarm(){try{var a=JSON.parse(localStorage.getItem('hd_alarm')||'null');var b=$('btnAlarm');if(b)b.textContent=a?('Deal-Alarm: '+a.q+' ab '+a.min+' Euro'):'Deal-Alarm: Aus'}catch(e){}}
+function toggleAlarm(){try{var a=JSON.parse(localStorage.getItem('hd_alarm')||'null');if(a){localStorage.removeItem('hd_alarm');toast('Deal-Alarm aus')}else{var q=($('searchInput').value||'iPhone').trim()||'iPhone';var m=prompt('Alarm bei neuem Deal - Mindestgewinn in Euro:','100');if(m===null)return;localStorage.setItem('hd_alarm',JSON.stringify({q:q,min:Number(m)||100,seen:alleDeals.length}));toast('Alarm aktiv: '+q)}renderAlarm()}catch(e){}}
+function checkAlarm(){try{var a=JSON.parse(localStorage.getItem('hd_alarm')||'null');if(!a||!alleDeals.length)return;var n=alleDeals.filter(function(d){var g=d._c?d._c.netto:(d.gewinn_netto||0);return g>=a.min}).length;if(n>(a.seen||0)){if((a.seen||0)>0&&alleDeals[0])toast('Neuer Deal: '+alleDeals[0].titel);a.seen=n;localStorage.setItem('hd_alarm',JSON.stringify(a))}}catch(e){}}
 function exportCSV(){var l=gefiltert();if(!l.length){toast('Keine Deals');return}
  var h='Titel;Plattform;Zustand;Standort;Kauf;Verkauf;Netto;ROI;Link\n';
  var b=l.map(function(d){return'"'+String(d.titel).replace(/"/g,'""')+'";'+d.plattform+';'+(d.zustand||'')+';'+(d.standort||'')+';'+d._c.kaufG+';'+d._c.verk+';'+d._c.netto+';'+(d._c.roi==null?'':d._c.roi)+';'+d.link}).join('\n');
@@ -318,6 +332,9 @@ function bind(){
  for(var i=0;i<ts.length;i++){ts[i].onclick=function(){for(var j=0;j<ts.length;j++)ts[j].classList.remove('on');this.classList.add('on');tab=this.getAttribute('data-t');favOnly=false;$('btnFavOnly').textContent='Favoriten';render()}}
  $('btnFavOnly').onclick=function(){favOnly=!favOnly;this.textContent=favOnly?'★ Favoriten':'Favoriten';this.classList.toggle('on',favOnly);render()};
  $('btnCSV').onclick=exportCSV;
+ var sr=$('selReichweite');if(sr)sr.onchange=lade;
+ var ba=$('btnAlarm');if(ba)ba.onclick=toggleAlarm;
+ renderHistory();renderAlarm();
  $('mback').addEventListener('click',function(e){if(e.target===this)closeModal()});
  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()});
  setInterval(function(){if(scanAt){var s=$('subline');if(s)s.textContent=(stand||'')+' - '+alleDeals.length+' Deals ('+zeitSeit()+')'}},30000);
