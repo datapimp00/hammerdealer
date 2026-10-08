@@ -1,0 +1,22 @@
+name: Keep-Alive Ping
+
+on:
+  schedule:
+    - cron: "*/14 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          URL="https://hammerdealer-single.onrender.com/api/health"
+          echo "Pinging $URL ..."
+          HTTP=$(curl -s -o /tmp/hd_health.json -w "%{http_code}" --max-time 90 "$URL" || echo "000")
+          echo "HTTP: $HTTP"
+          cat /tmp/hd_health.json 2>/dev/null | head -c 500
+          echo
+          if [ "$HTTP" != "200" ]; then
+            echo "::warning::Keep-alive ping returned $HTTP (service may be waking up)"
+          fi
