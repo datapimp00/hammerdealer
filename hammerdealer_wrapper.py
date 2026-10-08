@@ -347,25 +347,32 @@ def scan(q):
     """Echte Portale scannen (Kleinanzeigen + eBay/Vinted best effort)."""
     q = sanitize_q(q)
     try:
-        from scraper import scan_real, schaetze_verkauf
+        from scraper import scan_real, schaetze_verkauf, ebay_market_price
     except Exception as e:
         logging.warning("scraper import: %s", e)
         return []
     items, quellen = scan_real(q)
     if not items:
         return []
+    # Echter Marktpreis (eBay-Median) als Verkaufsschaetzung, sonst Kategorie-Faktor
+    marktpreis = None
+    try:
+        marktpreis = ebay_market_price(q)
+    except Exception:
+        marktpreis = None
     quelle_txt = "echt:" + "+".join(quellen)
     res = []
     for i, it in enumerate(items):
         preis = float(it.get("preis") or 0)
         if preis <= 0:
             continue
+        verkaufswert = marktpreis if marktpreis else schaetze_verkauf(preis, it.get("titel", ""))
         d = {
             "id": f"{it.get('plattform','x')[:2]}_{int(time.time())}_{i}",
             "titel": it.get("titel") or q,
             "plattform": it.get("plattform", "kleinanzeigen"),
             "kaufpreis": preis,
-            "verkaufswert": schaetze_verkauf(preis, it.get("titel", "")),
+            "verkaufswert": verkaufswert,
             "zustand": it.get("zustand", "gut"),
             "link": it.get("link", ""),
             "standort": it.get("standort", ""),
@@ -373,7 +380,8 @@ def scan(q):
         }
         b = berechne(d)
         if b:
-            b["verkaufswert_quelle"] = "Schaetzung (Faktor, kein Marktpreis)"
+            b["verkaufswert_quelle"] = ("eBay-Marktpreis (Median)" if marktpreis
+                                        else "Schaetzung (Faktor, kein Marktpreis)")
             b["quelle"] = quelle_txt
             res.append(b)
     # Deduplizierung

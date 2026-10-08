@@ -385,7 +385,7 @@ def nebenan(q):
 PORTALE = [
     ("kleinanzeigen", kleinanzeigen),
     ("autoscout24", autoscout24),
-    ("ebay", ebay),
+    ("ebay", ebay_browse),
     ("vinted", vinted),
 ]
 
@@ -401,3 +401,97 @@ def scan_real(q):
         except Exception as e:
             log.warning("%s: %s", name, str(e)[:100])
     return items, quellen
+
+# ---------- eBay Browse API (offiziell, kostenlos) ----------
+_EBAY_TOKEN = {"token": None, "exp": 0}
+
+def _ebay_creds():
+    app = os.environ.get("EBAY_APP_ID", "").strip()
+    cert = os.environ.get("EBAY_CERT_ID", "").strip()
+    return app, cert
+
+def ebay_token():
+    """OAuth client_credentials -> access_token (gecacht)."""
+    app, cert = _ebay_creds()
+    if not app or not cert:
+        return None
+    if _EBAY_TOKEN["token"] and time.time() < _EBAY_TOKEN["exp"] - 60:
+        return _EBAY_TOKEN["token"]
+    try:
+        import base64
+        cred = base64.b64encode((app + ":" + cert).encode()).decode()
+        r = requests.post(
+            "https://api.ebay.com/identity/v1/oauth2/token",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": "Basic " + cred,
+            },
+            data={"grant_type": "client_credentials",
+                  "scope": "https://api.ebay.com/oauth/api_scope"},
+            timeout=12,
+        )
+        if r.status_code == 200:
+            d = r.json()
+            _EBAY_TOKEN["token"] = d.get("access_token")
+            _EBAY_TOKEN["exp"] = time.time() + int(d.get("expires_in", 7200))
+            return _EBAY_TOKEN["token"]
+        log.info("eBay-Token: HTTP %s %s", r.status_code, r.text[:120])
+    except Exception as e:
+        log.warning("eBay-Token: %s", str(e)[:100])
+    return None
+
+def ebay_browse(q, limit=30):
+    """Offizielle eBay-Suche (item_summary). [] wenn kein Key oder Fehler."""
+    token = ebay_token()
+    if not token:
+        return []
+    try:
+        r = requests.get(
+            "https://api.ebay.com/buy/browse/v1/item_summary/search",
+            headers={"Authorization": "Bearer " + token},
+            params={"q": q, "limit": limit, "fieldgroups": "EXTENDED"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            log.info("eBay-Browse: HTTP %s %s", r.status_code, r.text[:120])
+            return []
+        data = r.json()
+    except Exception as e:
+        log.warning("eBay-Browse: %s", str(e)[:100])
+        return []
+    out = []
+    for it in (data.get("itemSummaries") or [])[:limit]:
+        try:
+            price = it.get("price", {}).get("value")
+            if price is None:
+                continue
+            img = it.get("image", {}) or {}
+            loc = it.get("itemLocation", {}) or {}
+            standort = (loc.get("city") or "") + ((", " + loc.get("country")) if loc.get("country") else "")
+            cond = str(it.get("condition") or "").lower()
+            zustand = "neu" if "new" in cond else "defekt" if ("defect" in cond or "damaged" in cond) else "gut"
+            out.append({
+                "titel": str(it.get("title") or "")[:80],
+                "preis": float(price),
+                "link": it.get("itemWebUrl") or "https://www.ebay.de",
+                "bild": img.get("imageUrl") or "",
+                "standort": standort,
+                "zustand": zustand,
+                "plattform": "ebay",
+                "beschreibung": "",
+            })
+        except Exception:
+            continue
+    return out
+
+def ebay_market_price(q):
+    """Durchschnittspreis der eBay-Treffer als echte Marktpreis-Schaetzung."""
+    items = ebay_browse(q, limit=15)
+    if not items:
+        return None
+    preise = [x["preis"] for x in items]
+    if not preise:
+        return None
+    preise.sort()
+    n = len(preise)
+    return round(preise[n // 2], 2)  # Median statt Mittelwert (robust)
