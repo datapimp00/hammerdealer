@@ -49,22 +49,23 @@ def _render_page(page, url, wait_selector=None, timeout=12000):
     return page.content()
 
 
-# (name, url-builder, base_url, wait_selector, titel_selektoren, limit)
+# (name, url-builder, wait_selector)
 # markt.de getestet: nur 'aehnliche Anzeigen' (Muell) -> NICHT dabei.
+# willhaben: parst __NEXT_DATA__ JSON (30 saubere Adverts, kein DOM-Geraten).
+# vinted: DOM-basiert (App-Router, kein __NEXT_DATA__) - fragiler.
+def _url_vinted(q):
+    return "https://www.vinted.de/catalog?search_text=" + q
+
+
+def _url_willhaben(q):
+    return ("https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=" + q)
+
+
 _PORTALE = [
-    ("vinted",
-     lambda q: "https://www.vinted.de/catalog?search_text=" + q,
-     "https://www.vinted.de",
-     "div.feed-grid__item-content, [data-testid*='item'], div[class*='feed-grid']",
-     ["h3", "h4", "[data-testid*='item-title']", "[class*='ItemBox__description']",
-      "[class*='new-item-box__description']", "a[href*='/items/']", "p"],
-     30),
-    ("willhaben",
-     lambda q: ("https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=" + q),
-     "https://www.willhaben.at",
-     "[data-testid='search-result'], div[class*='SearchResultCard']",
-     ["h3", "[data-testid*='header']", "span[class*='title']", "a[title]"],
-     30),
+    ("willhaben", _url_willhaben,
+     "[data-testid='search-result'], div[class*='SearchResultCard']"),
+    ("vinted", _url_vinted,
+     "div.feed-grid__item-content, [data-testid*='item'], div[class*='feed-grid']"),
 ]
 
 
@@ -86,12 +87,15 @@ def headless_scan(q):
                             "Chrome/124.0.0.0 Safari/537.36"),
                 locale="de-DE")
             page = ctx.new_page()
-            for name, url_fn, base_url, sel, titel_sels, limit in _PORTALE:
+            for name, url_fn, sel in _PORTALE:
                 try:
                     html = _render_page(page, url_fn(q_enc), wait_selector=sel)
-                    if html:
-                        out += _parse_listing(html, base_url, name,
-                                              titel_sels, limit)
+                    if not html:
+                        continue
+                    if name == "willhaben":
+                        out += parse_willhaben_json(html)
+                    else:
+                        out += _parse_vinted(html)
                 except Exception as e:
                     log.info("headless %s: %s", name, str(e)[:80])
                     continue
@@ -149,19 +153,78 @@ def _zustand(titel):
     return "gut"
 
 
-def _parse_listing(html, base_url, plattform, titel_sels, limit):
-    """Generischer Parser fuer gerenderte Ergebnislisten (Artikel + Preis).
-    titel_sels: Liste von CSS-Selektoren fuer das Titel-Element (der Reihe nach)."""
+def _wh_attr(adv, name):
+    """Wert eines willhaben-Attributs (erster Eintrag) oder None."""
+    for at in adv.get("attributes", {}).get("attribute", []):
+        if at.get("name") == name:
+            vals = at.get("values") or []
+            return vals[0] if vals else None
+    return None
+
+
+def parse_willhaben_json(html, limit=30):
+    """willhaben __NEXT_DATA__ JSON parsen -> saubere Advert-Dicts.
+    Enthaelt Titel/Preis/URL/Bild/Standort strukturiert (kein DOM-Geraten)."""
+    from bs4 import BeautifulSoup
+    import json
+    soup = BeautifulSoup(html, "html.parser")
+    nd = soup.find("script", id="__NEXT_DATA__")
+    if not nd or not nd.string:
+        log.info("willhaben: kein __NEXT_DATA__")
+        return []
+    try:
+        data = json.loads(nd.string)
+    except Exception as e:
+        log.info("willhaben __NEXT_DATA__ JSON-Fehler: %s", str(e)[:60])
+        return []
+    advs = (data.get("props", {}).get("pageProps", {})
+            .get("searchResult", {}).get("advertSummaryList", {}).get("advertSummary", []))
+    out = []
+    for adv in advs[:limit]:
+        try:
+            titel = adv.get("description", "")
+            preis = _parse_preis(_wh_attr(adv, "PRICE/AMOUNT") or "") or _parse_preis(
+                _wh_attr(adv, "PRICE_FOR_DISPLAY") or "")
+            if preis is None or preis <= 0 or not _gueltiger_titel(titel):
+                continue
+            # Link: seoSelfLink oder iadShareLink
+            link = "https://www.willhaben.at"
+            for c in adv.get("contextLinkList", {}).get("contextLink", []):
+                if c.get("id") == "iadShareLink":
+                    link = c.get("uri", link)
+                    break
+            seo = _wh_attr(adv, "SEO_URL")
+            if seo and not link.startswith("http"):
+                link = "https://www.willhaben.at/iad/" + seo
+            bild_url = _wh_attr(adv, "ALL_IMAGE_URLS") or ""
+            if bild_url and not bild_url.startswith("http"):
+                bild_url = "https://cache.willhaben.at/" + bild_url
+            out.append({
+                "titel": titel[:80], "preis": preis, "link": link,
+                "bild": bild_url, "standort": _wh_attr(adv, "LOCATION") or "",
+                "zustand": _zustand(titel), "plattform": "willhaben", "beschreibung": "",
+            })
+        except Exception:
+            continue
+    log.info("headless willhaben(json): %d Artikel", len(out))
+    return out
+
+
+def _parse_vinted(html, limit=30):
+    """vinted DOM-parsen (App-Router, kein __NEXT_DATA__). Fragil: nur saubere
+    Titel aus dedizierten Selektoren, kein Container-Text."""
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
+    titel_sels = ["h3", "h4", "[data-testid*='item-title']",
+                  "[class*='ItemBox__description']",
+                  "[class*='new-item-box__description']",
+                  "a[href*='/items/']", "p"]
     out = []
-    arts = soup.select("article, [data-testid*='item'], [data-testid*='result'], "
-                       "[data-testid*='listing'], li[class*='item'], div[class*='result'], "
-                       ".clsy-c-carousel__item, div[class*='feed-grid']")
+    arts = soup.select("div[class*='feed-grid__item'], div[class*='feed-grid'], "
+                       "[data-testid*='item'], [class*='ItemBox'], article")
     seen = set()
     for a in arts[: limit * 4]:
         try:
-            # Titel aus dem ersten passenden dedizierten Titel-Selektor
             titel = ""
             for sel in titel_sels:
                 el = a.select_one(sel)
@@ -171,7 +234,6 @@ def _parse_listing(html, base_url, plattform, titel_sels, limit):
                         titel = cand
                         break
             if not titel:
-                # Fallback: Bild-alt
                 img = a.select_one("img[alt]")
                 if img and img.get("alt"):
                     titel = img.get("alt").strip()
@@ -183,23 +245,23 @@ def _parse_listing(html, base_url, plattform, titel_sels, limit):
             l = a.select_one("a[href]")
             href = l.get("href", "") if l else ""
             if href.startswith("/"):
-                href = base_url + href
+                href = "https://www.vinted.de" + href
             i = a.select_one("img")
             bild = ((i.get("src") or i.get("data-src") or "") if i else "")
-            # Dedup ueber normalisierten Titel
             key = re.sub(r"\s+", " ", titel.lower())[:40]
             if key in seen:
                 continue
             seen.add(key)
             out.append({
-                "titel": titel[:80], "preis": preis, "link": href or base_url,
+                "titel": titel[:80], "preis": preis, "link": href or "https://www.vinted.de",
                 "bild": bild, "standort": "", "zustand": _zustand(titel),
-                "plattform": plattform, "beschreibung": "",
+                "plattform": "vinted", "beschreibung": "",
             })
             if len(out) >= limit:
                 break
         except Exception:
             continue
-    log.info("headless %s: %d Artikel", plattform, len(out))
+    log.info("headless vinted(dom): %d Artikel", len(out))
     return out
+
 
