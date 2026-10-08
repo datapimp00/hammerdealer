@@ -177,9 +177,10 @@ function calc(d,o){
  var verp=o.verp?1.5:0, versi=(o.vers&&verk>=100)?2.5:0, pp=o.paypal?Math.round(verk*0.015*100)/100:0;
  var mwst=o.mwst?Math.round(verk*0.19*100)/100:0;
  var ab=verkGeb+zahlGeb+versV+fix+rueck+sich+verp+versi+pp+mwst;
- var kaufG=kauf+versE, brutto=verk-kaufG-ab;
- var p=brutto<=100?2:brutto<=300?3:4, prov=Math.round(brutto*p)/100;
- var netto=Math.round((brutto-prov)*100)/100;
+ var kaufG=kauf; // Kaufpreis inkl. Einkaufsversand (d.kaufpreis_gesamt) - nicht noch einmal +versE
+ var netto=Number(d.gewinn_netto)||0;
+ var brutto=Number(d.gewinn_brutto)||0;
+ var prov=Math.round((brutto-netto)*100)/100;
  var roi=kaufG>0?Math.round(netto/kaufG*1000)/10:null;
  return{kaufG:kaufG,verk:verk,ab:ab,brutto:Math.round(brutto*100)/100,prov:prov,netto:netto,roi:roi,
  extra:{verp:verp,versi:versi,pp:pp,mwst:mwst,versV:versV,versE:versE,verkGeb:verkGeb,zahlGeb:zahlGeb,fix:fix,rueck:rueck,sich:sich}};
