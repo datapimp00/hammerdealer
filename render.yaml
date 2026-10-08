@@ -10,6 +10,12 @@ services:
         sync: false
       - key: PROXY_LIST
         sync: false
+      # In Render-Dashboard: 1 Service Free -> Environment -> ebaga
+      # die Keys nur hier eintragen, nicht ins Git.
+      - key: EBAY_APP_ID
+        sync: false
+      - key: EBAY_CERT_ID
+        sync: false
       - key: MIN_PROFIT
         value: 50
       - key: EBAY_APP_ID
@@ -17,6 +23,6 @@ services:
       - key: EBAY_CERT_ID
         sync: false
       - key: EBAY_ENV
-        value: sandbox
+        value: production
     healthCheckPath: /api/health
 
