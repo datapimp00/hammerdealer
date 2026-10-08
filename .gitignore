@@ -1,0 +1,28 @@
+# Secrets - NIEMALS committen!
+PROXY_LIST.txt
+README_LIVE.txt
+.env
+.env.*
+*.key
+*_API_KEY*
+
+# Datenbanken (werden zur Laufzeit erzeugt)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env_venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

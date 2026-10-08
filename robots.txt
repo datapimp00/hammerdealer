@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /index.html
+Allow: /portale.html
+Allow: /meine-angebote.html
+Disallow: /api/
+Disallow: /admin_dashboard.html
+Sitemap: /sitemap.xml

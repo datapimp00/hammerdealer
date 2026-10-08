@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: hammerdealer-single
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn hammerdealer_wrapper:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    envVars:
+      - key: HAMMERDEALER_API_KEY
+        sync: false
+      - key: PROXY_LIST
+        sync: false
+      - key: MIN_PROFIT
+        value: 50
+    healthCheckPath: /api/health
+
