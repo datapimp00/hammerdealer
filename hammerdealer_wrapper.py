@@ -21,7 +21,10 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "hammerdealer.db")
 MIN_PROFIT = 100
 
 _CACHE = {}
-_CACHE_TTL = 60  # Sekunden, bis ein Scan wiederholt aus dem Cache gegeben wird
+# Sekunden, bis ein Scan wiederholt aus dem Cache gegeben wird.
+# Per Env CACHE_TTL steuerbar (Default 60). Hoeher = mehr instant-Wiederholungen,
+# aber evtl. etwas aeltere Preise. Auf Render in der Env setzbar.
+_CACHE_TTL = int(os.environ["CACHE_TTL"]) if os.environ.get("CACHE_TTL", "").strip().isdigit() else 60
 START_TIME = datetime.now()
 
 def get_db():
