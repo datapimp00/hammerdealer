@@ -51,21 +51,19 @@ def _render_page(page, url, wait_selector=None, timeout=12000):
 
 # (name, url-builder, wait_selector)
 # markt.de getestet: nur 'aehnliche Anzeigen' (Muell) -> NICHT dabei.
+# vinted getestet (10/2026): Cloudflare-Challenge "Nur einen Moment..." -> 0 echte
+#   Artikel. Headless-Browser kommt nicht durch -> raus.
 # willhaben: parst __NEXT_DATA__ JSON (30 saubere Adverts, kein DOM-Geraten).
-# vinted: DOM-basiert (App-Router, kein __NEXT_DATA__) - fragiler.
-def _url_vinted(q):
-    return "https://www.vinted.de/catalog?search_text=" + q
-
-
+#   ACHTUNG (10/2026): willhaben hat teils Cloudflare ("Attention Required") aktiv.
+#   Dann fehlt __NEXT_DATA__ -> 0 Artikel. Deshalb STANDARDMAESSIG AUS (HEADLESS=0),
+#   per Env HEADLESS=1 aktivierbar wenn Cloudflare mal durchlaesst.
 def _url_willhaben(q):
     return ("https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword=" + q)
 
 
 _PORTALE = [
-    ("willhaben", _url_willhaben,
-     "[data-testid='search-result'], div[class*='SearchResultCard']"),
-    ("vinted", _url_vinted,
-     "div.feed-grid__item-content, [data-testid*='item'], div[class*='feed-grid']"),
+    # Warte gezielt auf __NEXT_DATA__ (echtes Daten-Signal, nicht leere/Challenge-Seite).
+    ("willhaben", _url_willhaben, "script#__NEXT_DATA__"),
 ]
 
 
@@ -92,10 +90,7 @@ def headless_scan(q):
                     html = _render_page(page, url_fn(q_enc), wait_selector=sel)
                     if not html:
                         continue
-                    if name == "willhaben":
-                        out += parse_willhaben_json(html)
-                    else:
-                        out += _parse_vinted(html)
+                    out += parse_willhaben_json(html)
                 except Exception as e:
                     log.info("headless %s: %s", name, str(e)[:80])
                     continue
@@ -208,60 +203,3 @@ def parse_willhaben_json(html, limit=30):
             continue
     log.info("headless willhaben(json): %d Artikel", len(out))
     return out
-
-
-def _parse_vinted(html, limit=30):
-    """vinted DOM-parsen (App-Router, kein __NEXT_DATA__). Fragil: nur saubere
-    Titel aus dedizierten Selektoren, kein Container-Text."""
-    from bs4 import BeautifulSoup
-    soup = BeautifulSoup(html, "html.parser")
-    titel_sels = ["h3", "h4", "[data-testid*='item-title']",
-                  "[class*='ItemBox__description']",
-                  "[class*='new-item-box__description']",
-                  "a[href*='/items/']", "p"]
-    out = []
-    arts = soup.select("div[class*='feed-grid__item'], div[class*='feed-grid'], "
-                       "[data-testid*='item'], [class*='ItemBox'], article")
-    seen = set()
-    for a in arts[: limit * 4]:
-        try:
-            titel = ""
-            for sel in titel_sels:
-                el = a.select_one(sel)
-                if el:
-                    cand = el.get("title") if el.get("title") else el.get_text(strip=True)
-                    if cand and _gueltiger_titel(cand):
-                        titel = cand
-                        break
-            if not titel:
-                img = a.select_one("img[alt]")
-                if img and img.get("alt"):
-                    titel = img.get("alt").strip()
-            if not _gueltiger_titel(titel):
-                continue
-            preis = _parse_preis(a.get_text(" ", strip=True))
-            if preis is None or preis <= 0:
-                continue
-            l = a.select_one("a[href]")
-            href = l.get("href", "") if l else ""
-            if href.startswith("/"):
-                href = "https://www.vinted.de" + href
-            i = a.select_one("img")
-            bild = ((i.get("src") or i.get("data-src") or "") if i else "")
-            key = re.sub(r"\s+", " ", titel.lower())[:40]
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append({
-                "titel": titel[:80], "preis": preis, "link": href or "https://www.vinted.de",
-                "bild": bild, "standort": "", "zustand": _zustand(titel),
-                "plattform": "vinted", "beschreibung": "",
-            })
-            if len(out) >= limit:
-                break
-        except Exception:
-            continue
-    log.info("headless vinted(dom): %d Artikel", len(out))
-    return out
-
-

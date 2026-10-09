@@ -403,8 +403,9 @@ def portale():
 
 
 def headless_aktiv():
-    """Headless-Scraping an/aus. Per Env abschaltbar (HEADLESS=0)."""
-    return os.environ.get("HEADLESS", "1").strip() not in ("0", "false", "off", "no")
+    """Headless-Scraping an/aus. STANDARD AUS (Cloudflare blockt unzuverlaessig).
+    Per Env HEADLESS=1 aktivieren wenn man es probieren will."""
+    return os.environ.get("HEADLESS", "0").strip() not in ("0", "false", "off", "no")
 
 
 def scan_real(q):
