@@ -143,85 +143,6 @@ def kleinanzeigen(q, limit=75, pages=3):
             break
     return out
 
-def ebay(q, limit=15):
-    """Best effort - eBay blockt viele IPs; [] wenn gesperrt."""
-    url = "https://www.ebay.de/sch/i.html?_nkw=" + requests.utils.quote(q) + "&_ipg=60"
-    r = _get(url, tries=1)
-    if not r:
-        return []
-    soup = BeautifulSoup(r.text, "html.parser")
-    out = []
-    for el in soup.select(".s-item")[:limit]:
-        try:
-            t = el.select_one(".s-item__title")
-            p = el.select_one(".s-item__price")
-            i = el.select_one(".s-item__image-img")
-            h = el.select_one("a.s-item__link")
-            titel = t.get_text(strip=True) if t else ""
-            preis = _parse_preis(p.get_text() if p else "")
-            if not titel or titel == "Shop auf eBay" or preis is None:
-                continue
-            out.append({
-                "titel": titel[:80], "preis": preis,
-                "link": (h.get("href", "").split("?")[0] if h else "https://www.ebay.de"),
-                "bild": ((i.get("src") or "") if i else ""), "standort": "",
-                "zustand": _zustand(titel), "plattform": "ebay", "beschreibung": "",
-            })
-        except Exception:
-            continue
-    return out[:limit]
-
-def vinted(q, limit=15):
-    """Best effort - Vinted (DataDome) blockt oft; [] wenn gesperrt."""
-    url = ("https://www.vinted.de/api/v2/catalog/items?search_text="
-           + requests.utils.quote(q) + "&per_page=" + str(limit) + "&page=1")
-    r = _get(url, tries=1, headers={**HEADERS, "Accept": "application/json",
-                           "Referer": "https://www.vinted.de/"})
-    if not r:
-        return []
-    try:
-        items = (r.json() or {}).get("items", [])
-    except Exception:
-        return []
-    out = []
-    for it in items[:limit]:
-        try:
-            pr = it.get("price")
-            price = float(str(pr).replace(",", ".")) if pr else 0.0
-            if not price:
-                continue
-            photo = (it.get("photo") or {}).get("url") or ""
-            user = it.get("user") if isinstance(it.get("user"), dict) else {}
-            out.append({
-                "titel": str(it.get("title") or "")[:80], "preis": price,
-                "link": "https://www.vinted.de/items/" + str(it.get("id") or ""),
-                "bild": photo, "standort": user.get("city", ""),
-                "zustand": _zustand(str(it.get("title") or "")),
-                "plattform": "vinted", "beschreibung": "",
-            })
-        except Exception:
-            continue
-    return out
-
-def scan_real(q):
-    """Alle Quellen abfragen; liefert (items, quellen_namen)."""
-    items, quellen = [], []
-    try:
-        ka = kleinanzeigen(q)
-        if ka:
-            items += ka
-            quellen.append("kleinanzeigen")
-    except Exception as e:
-        log.warning("KA: %s", str(e)[:100])
-    for fn, name in ((ebay, "ebay"), (vinted, "vinted")):
-        try:
-            got = fn(q)
-            if got:
-                items += got
-                quellen.append(name)
-        except Exception as e:
-            log.warning("%s: %s", name, str(e)[:100])
-    return items, quellen
 
 def _jsonld_products(html):
     """Generischer JSON-LD-Extractor: Produkt/Angebot/ListItem -> Titel/Preis/Bild/URL."""
@@ -486,8 +407,9 @@ def ebay_token():
         log.warning("eBay-Token: %s", str(e)[:100])
     return None
 
-def ebay_browse(q, limit=30):
-    """Offizielle eBay-Suche (item_summary). [] wenn kein Key oder Fehler."""
+def ebay_browse(q, limit=100):
+    """Offizielle eBay-Suche (item_summary). [] wenn kein Key oder Fehler.
+    limit=100: Browse-API erlaubt bis 200/Anfrage -> mehr Deals bei EINEM Call."""
     token = ebay_token()
     if not token:
         return []
