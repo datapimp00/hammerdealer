@@ -6,4 +6,5 @@ beautifulsoup4>=4.12
 lxml>=4.9
 psycopg2-binary>=2.9
 playwright>=1.40
+curl_cffi>=0.13
 

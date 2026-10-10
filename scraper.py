@@ -311,6 +311,42 @@ def nebenan(q):
         "https://www.nebenan.de/suche?query=" + requests.utils.quote(q),
         "https://www.nebenan.de")
 
+def willhaben_scan(q, limit=30):
+    """willhaben.at OHNE Browser knacken: curl_cffi (Chrome-TLS-Fingerprint)
+    + Proxy-Rotation umgehen Cloudflare (direkt = 403, via Proxy = 200).
+    Liefert [] wenn curl_cffi fehlt oder alle Proxies blockt werden (kein Crash)."""
+    try:
+        from curl_cffi import requests as crq
+    except Exception as e:
+        log.info("curl_cffi nicht verfuegbar: %s", str(e)[:60])
+        return []
+    try:
+        from headless_scraper import parse_willhaben_json
+    except Exception:
+        return []
+    url = ("https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz?keyword="
+           + requests.utils.quote(q))
+    hdrs = {"Accept-Language": "de-AT,de;q=0.9",
+            "Accept": "text/html,application/xhtml+xml"}
+    pool = [None] + _proxy_list()  # direkt zuerst, dann Proxies
+    for px in pool:
+        try:
+            r = crq.get(url, impersonate="chrome131", headers=hdrs,
+                        proxies=({"http": px, "https": px} if px else None),
+                        timeout=15)
+        except Exception:
+            continue
+        if r.status_code != 200:
+            continue
+        items = parse_willhaben_json(r.text, limit=limit)
+        if items:
+            log.info("willhaben(cffi) %d Artikel (proxy=%s)",
+                     len(items), "nein" if px is None else "ja")
+            return items
+    log.info("willhaben(cffi): keine Quelle liefert (CF-Block)")
+    return []
+
+
 # Registrierte Portale: (name, funktion)
 # Nur Quellen, die WIRKLICH such-relevante Daten liefern.
 # kleinanzeigen (HTML, Multi-Page) + ebay (Browse-API).
@@ -320,6 +356,7 @@ def portale():
     return [
         ("kleinanzeigen", kleinanzeigen),
         ("ebay", ebay_browse),
+        ("willhaben", willhaben_scan),
     ]
 
 
