@@ -568,3 +568,19 @@ def kleinigkeiten():
 
 if __name__=='__main__':
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8765)))
+
+
+@app.route('/api/debug')
+def api_debug():
+    """Nur Konfigurations-Status (gesetzt/fehlt), NIE die Werte selbst."""
+    def gesetzt(k):
+        return bool(os.environ.get(k, "").strip())
+    return jsonify({
+        "ebay_app_id_gesetzt": gesetzt("EBAY_APP_ID"),
+        "ebay_cert_id_gesetzt": gesetzt("EBAY_CERT_ID"),
+        "ebay_env": os.environ.get("EBAY_ENV", "(leer)"),
+        "proxy_list_gesetzt": gesetzt("PROXY_LIST"),
+        "cache_ttl": _CACHE_TTL,
+        "headless": os.environ.get("HEADLESS", "1"),
+        "min_profit": os.environ.get("MIN_PROFIT", "(Default)"),
+    })
