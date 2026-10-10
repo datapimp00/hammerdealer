@@ -311,6 +311,29 @@ def nebenan(q):
         "https://www.nebenan.de/suche?query=" + requests.utils.quote(q),
         "https://www.nebenan.de")
 
+# Proxy-Health-Tracking: bei 403/CF-Challenge pausiert die IP 10 Minuten,
+# damit ein Scan nicht immer wieder markierte IPs versucht (und den Block vertieft).
+_PX_COOLDOWN = {}  # ip -> monotonic-Zeitpunkt, ab dem wieder erlaubt
+_PX_COOLDOWN_SEK = 600
+
+
+def _px_frei(px):
+    if px is None:
+        return True
+    bis = _PX_COOLDOWN.get(px)
+    if bis is None:
+        return True
+    if time.monotonic() > bis:
+        _PX_COOLDOWN.pop(px, None)
+        return True
+    return False
+
+
+def _px_sperre(px):
+    if px is not None:
+        _PX_COOLDOWN[px] = time.monotonic() + _PX_COOLDOWN_SEK
+
+
 def willhaben_scan(q, limit=30):
     """willhaben.at OHNE Browser knacken: curl_cffi (Chrome-TLS-Fingerprint)
     + Proxy-Rotation umgehen Cloudflare (direkt = 403, via Proxy = 200).
@@ -330,13 +353,17 @@ def willhaben_scan(q, limit=30):
             "Accept": "text/html,application/xhtml+xml"}
     pool = [None] + _proxy_list()  # direkt zuerst, dann Proxies
     for px in pool:
+        if not _px_frei(px):
+            continue
         try:
             r = crq.get(url, impersonate="chrome131", headers=hdrs,
                         proxies=({"http": px, "https": px} if px else None),
                         timeout=15)
         except Exception:
+            _px_sperre(px)
             continue
         if r.status_code != 200:
+            _px_sperre(px)
             continue
         items = parse_willhaben_json(r.text, limit=limit)
         if items:
@@ -344,6 +371,121 @@ def willhaben_scan(q, limit=30):
                      len(items), "nein" if px is None else "ja")
             return items
     log.info("willhaben(cffi): keine Quelle liefert (CF-Block)")
+    return []
+
+
+def _gueltiger_titel(titel):
+    """Filtert Muell-Titel raus: zu kurz, reine Preise/Preisart-Fragmente."""
+    if not titel:
+        return False
+    t = titel.strip()
+    if len(t) < 8:
+        return False
+    if re.fullmatch(r"[\d\s.,€EUR|$]+", t):
+        return False
+    letters = [c for c in t if c.isalpha()]
+    if len(letters) < 4:
+        return False
+    return True
+
+
+def parse_vinted_html(html, base_url, limit=40):
+    """vinted Suchergebnisse parsen (SSR-Feed, kein __NEXT_DATA__).
+    Struktur: a[data-testid*='--overlay-link'] mit title="Titel, Brand: X,
+    Condition: Y, 98.00 $" -> Titel + Preis extrahierbar. Rueckgabe Artikel-Dicts."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    out = []
+    seen = set()
+    for a in soup.select("a[data-testid*='overlay-link'][title]")[:limit * 3]:
+        try:
+            raw = a.get("title", "")
+            if not raw or not _gueltiger_titel(raw.split(",")[0]):
+                continue
+            # Preis am Ende: "98.00 $" / "12,50 €" / "98.00 EUR"
+            m = re.search(r"(\d{1,4}(?:[.,]\d{3})*|\d+)(?:[.,](\d{1,2}))?\s*(€|EUR|USD|\$|£)", raw)
+            if not m:
+                continue
+            preis = float(m.group(1).replace(".", "").replace(",", ".")) + \
+                (float("0." + m.group(2)) if m.group(2) else 0.0)
+            if preis <= 0:
+                continue
+            # USD-Preise (vinted.com) -> EUR umrechnen (ca.-Kurs, Roundtrip)
+            if m.group(3) in ("$", "USD"):
+                preis = round(preis * 0.92, 2)
+            # Titel = alles vor ", Brand:" (oder vor ", Marque:" bei fr)
+            titel = re.split(r",\s*(?:Brand|Marque|Marka|Marca):", raw)[0].strip()
+            if not _gueltiger_titel(titel):
+                continue
+            href = a.get("href", "")
+            if href.startswith("/"):
+                href = base_url + href
+            key = re.sub(r"\s+", " ", titel.lower())[:40]
+            if key in seen:
+                continue
+            seen.add(key)
+            # Bild + ggf. Zustand aus dem img-alt (identischer Text)
+            img = a.find_parent().select_one("img") if a.find_parent() else None
+            bild = (img.get("src") or "") if img else ""
+            zust = "gut"
+            rl = raw.lower()
+            if any(w in rl for w in ("condition: good", "condition: neuf", "condition: new")):
+                zust = "neu" if ("neuf" in rl or "new" in rl) else "gut"
+            if any(w in rl for w in ("condition: poor", "condition: bad", "defect")):
+                zust = "defekt"
+            out.append({
+                "titel": titel[:80], "preis": preis, "link": href or base_url,
+                "bild": bild, "standort": "", "zustand": zust,
+                "plattform": "vinted", "beschreibung": "",
+            })
+            if len(out) >= limit:
+                break
+        except Exception:
+            continue
+    log.info("vinted parse: %d Artikel", len(out))
+    return out
+
+
+def vinted_scan(q, limit=40):
+    """vinted OHNE Browser: curl_cffi + Proxy-Rotation. Nur FR/COM-Maerkte sind
+    offen (.de/.at/.it/... CF-geblockt); fr liefert EUR, com USD (umgerechnet).
+    Rate-limit-schonend: max. 2 Requests, danach Abbruch (IPs sonst markiert).
+    [] wenn alle Quellen blocken (kein Crash)."""
+    try:
+        from curl_cffi import requests as crq
+    except Exception as e:
+        log.info("curl_cffi nicht verfuegbar: %s", str(e)[:60])
+        return []
+    hdrs = {"Accept-Language": "de-DE,de;q=0.9"}
+    # Nur offene Maerkte: fr (EUR) zuerst, com (USD) als Fallback
+    maerkte = [("https://www.vinted.fr", 1), ("https://www.vinted.com", 1)]
+    proxy_pool = _proxy_list()
+    random.shuffle(proxy_pool)
+    tries = 0
+    for base, brauche in maerkte:
+        for px in [None] + proxy_pool:
+            if not _px_frei(px):
+                continue
+            if tries >= 4:  # hartes Rate-Limit-Budget pro Scan
+                break
+            tries += 1
+            url = base + "/catalog?search_text=" + requests.utils.quote(q)
+            try:
+                r = crq.get(url, impersonate="chrome131", headers=hdrs,
+                            proxies=({"http": px, "https": px} if px else None),
+                            timeout=15)
+            except Exception:
+                _px_sperre(px)
+                continue
+            if r.status_code != 200:
+                _px_sperre(px)  # markiert -> 10 Min pausieren
+                continue
+            items = parse_vinted_html(r.text, base, limit=limit)
+            if len(items) >= brauche:
+                log.info("vinted(cffi) %d Artikel von %s (proxy=%s)",
+                         len(items), base.split('.')[-1], "nein" if px is None else "ja")
+                return items
+    log.info("vinted(cffi): keine Quelle liefert (CF-Block/Rate-Limit)")
     return []
 
 
@@ -357,6 +499,7 @@ def portale():
         ("kleinanzeigen", kleinanzeigen),
         ("ebay", ebay_browse),
         ("willhaben", willhaben_scan),
+        ("vinted", vinted_scan),
     ]
 
 
