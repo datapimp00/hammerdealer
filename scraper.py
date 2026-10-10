@@ -489,6 +489,78 @@ def vinted_scan(q, limit=40):
     return []
 
 
+def parse_marktde_html(html, base_url="https://www.markt.de", limit=30):
+    """markt.de Suchergebnisse parsen (SSR unter /suche/<begriff>/, kein JS).
+    li.clsy-c-result-list-item: title=Titel, data-onclick-url=Link,
+    .clsy-c-result-list-item__price='200 € VB'."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    out = []
+    seen = set()
+    for li in soup.select("li.clsy-c-result-list-item")[:limit * 3]:
+        try:
+            titel = (li.get("title") or "").strip()
+            if not _gueltiger_titel(titel):
+                continue
+            preis_el = li.select_one("[class*=__price]")
+            preis = None
+            if preis_el:
+                pm = re.search(r"(\d{1,4}(?:\.\d{3})*|\d+)(?:,(\d{1,2}))?", preis_el.get_text())
+                if pm:
+                    preis = float(pm.group(1).replace(".", "")) + \
+                        (float("0." + pm.group(2)) if pm.group(2) else 0.0)
+            if preis is None or preis <= 0:
+                continue  # ohne Preis kein Deal (Jobs/Vermietungen raus)
+            href = li.get("data-onclick-url") or ""
+            if href.startswith("/"):
+                href = href.split("?")[0]
+                href = base_url + href
+            img = li.select_one("img")
+            bild = (img.get("src") or "") if img else ""
+            ort = ""
+            if img and img.get("alt") and " - " in img.get("alt", ""):
+                ort = img.get("alt").rsplit(" - ", 1)[-1].strip()
+            key = re.sub(r"\s+", " ", titel.lower())[:40]
+            if key in seen:
+                continue
+            seen.add(key)
+            rtxt = (li.get_text(" ", strip=True) + " " + titel).lower()
+            zust = "defekt" if any(w in rtxt for w in ("defekt", "reparatur", "schaden")) \
+                else ("neu" if any(w in rtxt for w in ("neu,", "fabrikneu", "ungeöffnet")) else "gut")
+            out.append({
+                "titel": titel[:80], "preis": preis, "link": href or base_url,
+                "bild": bild, "standort": ort, "zustand": zust,
+                "plattform": "marktde", "beschreibung": "",
+            })
+            if len(out) >= limit:
+                break
+        except Exception:
+            continue
+    log.info("marktde parse: %d Artikel", len(out))
+    return out
+
+
+def marktde_scan(q, limit=30):
+    """markt.de: direkte SSR-Suchseite /suche/<begriff>/ (kein Browser, kein Proxy).
+    [] bei Fehler (kein Crash)."""
+    try:
+        from curl_cffi import requests as crq
+    except Exception as e:
+        log.info("curl_cffi nicht verfuegbar: %s", str(e)[:60])
+        return []
+    url = "https://www.markt.de/suche/" + requests.utils.quote(q.lower().replace(" ", "-")) + "/"
+    try:
+        r = crq.get(url, impersonate="chrome131",
+                    headers={"Accept-Language": "de-DE,de;q=0.9"}, timeout=15)
+    except Exception as e:
+        log.info("marktde: %s", str(e)[:60])
+        return []
+    if r.status_code != 200:
+        log.info("marktde: status %s", r.status_code)
+        return []
+    return parse_marktde_html(r.text, limit=limit)
+
+
 # Registrierte Portale: (name, funktion)
 # Nur Quellen, die WIRKLICH such-relevante Daten liefern.
 # kleinanzeigen (HTML, Multi-Page) + ebay (Browse-API).
@@ -500,6 +572,7 @@ def portale():
         ("ebay", ebay_browse),
         ("willhaben", willhaben_scan),
         ("vinted", vinted_scan),
+        ("marktde", marktde_scan),
     ]
 
 
