@@ -228,6 +228,28 @@ def euro_format(betrag):
     """Deutsches Euro Format: 1.234,56€"""
     return f"{betrag:,.2f}€".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def _robuster_median(preise):
+    """Median einer Preisliste mit IQR-Ausreisser-Filter (1.5*IQR).
+    preise: aufsteigend sortierte Liste von floats. None wenn <3 Werte."""
+    if not preise or len(preise) < 3:
+        return None
+    n = len(preise)
+
+    def _q(frac):
+        idx = frac * (n - 1)
+        lo = int(idx)
+        hi = min(lo + 1, n - 1)
+        return preise[lo] + (preise[hi] - preise[lo]) * (idx - lo)
+
+    q1, q3 = _q(0.25), _q(0.75)
+    iqr = q3 - q1
+    lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    kern = [p for p in preise if lo <= p <= hi] or preise
+    m = len(kern)
+    med = kern[m // 2] if m % 2 else round((kern[m // 2 - 1] + kern[m // 2]) / 2, 2)
+    return round(med, 2)
+
+
 def berechne(d):
     # Kleinigkeiten: Titel, Preis Parsing
     titel = truncate(d["titel"])
@@ -443,12 +465,34 @@ def scan(q):
     if not items:
         return []
 
-    # Echter Marktpreis (eBay-Median) als Verkaufsschaetzung
+    # Echter Marktpreis aus VERKAUFTEN eBay-Auktionen (soldItems). Die Browse-API
+    # liefert abgeschlossene Verkaeufe mit echten Endpreisen -> realer Marktwert.
+    # Fallback: Median der aktiven eBay-Listings, dann Median der gescannten
+    # Angebotspreise, zuletzt x-Faktor-Schaetzung (deutlich markiert).
     marktpreis = None
+    markt_quelle = None
+    sold_echt = False
     try:
-        marktpreis = ebay_market_price(q)
+        from scraper import ebay_sold_price as _sold
+        sold_preis = _sold(q)
+        if sold_preis:
+            marktpreis = sold_preis
+            markt_quelle = "eBay-Verkäufe (Sold-Auktionen, Median)"
+            sold_echt = True
     except Exception:
         marktpreis = None
+    if not marktpreis:
+        try:
+            marktpreis = ebay_market_price(q)
+            if marktpreis:
+                markt_quelle = "eBay-Marktpreis (Median)"
+        except Exception:
+            marktpreis = None
+    # Hinweis: KEIN Fallback auf den Median der Angebots- (Kauf-)Preise.
+    # Der Median der asking prices ist bei gemischten Suchen (z.B. "playstation":
+    # PS1/PS2/PS5/Spiele/Controller gemischt) als "Marktwert" irrefuehrend und
+    # erzeugt falsche Gewinne. Bleibt kein echter Marktpreis, nutzen wir die
+    # klar als Schaetzung markierte Faktor-Schaetzung (schaetze_verkauf).
 
     quelle_txt = "echt:" + "+".join(quellen_scrape) if quellen_scrape else "wrapper"
     res = []
@@ -456,7 +500,12 @@ def scan(q):
         preis = float(it.get("kaufpreis") or it.get("preis") or 0)
         if preis <= 0:
             continue
-        verkaufswert = marktpreis if marktpreis else schaetze_verkauf(preis, it.get("titel", ""))
+        # Verkaufswert: echter Marktpreis wenn plausibel (nicht unter Kaufpreis),
+        # sonst Faktor-Schaetzung als Notnagel.
+        if marktpreis and marktpreis > preis:
+            verkaufswert = marktpreis
+        else:
+            verkaufswert = schaetze_verkauf(preis, it.get("titel", ""))
         d = {
             "id": f"{it.get('plattform', 'x')[:2]}_{int(time.time())}_{i}",
             "titel": it.get("titel") or q,
@@ -470,8 +519,8 @@ def scan(q):
         }
         b = berechne(d)
         if b:
-            b["verkaufswert_quelle"] = ("eBay-Marktpreis (Median)" if marktpreis
-                                        else "Schaetzung (Faktor, kein Marktpreis)")
+            b["verkaufswert_quelle"] = (markt_quelle if marktpreis and marktpreis > preis
+                                         else "Schaetzung (Faktor, kein Marktpreis)")
             b["quelle"] = quelle_txt
             res.append(b)
 
