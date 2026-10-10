@@ -28,5 +28,9 @@ services:
       # (bricht bei Cloudflare/fehlendem RAM sanglos auf kleinanzeigen+eBay zurueck).
       - key: HEADLESS
         value: "0"
+      # Cache-TTL in Sekunden: 300 = Wiederhol-Scans 5 Min instant
+      # (statt Neuscan bei jedem Aufruf). Neuere Preise? -> 60 setzen.
+      - key: CACHE_TTL
+        value: "300"
     healthCheckPath: /api/health
 
