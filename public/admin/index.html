@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>2HEART Admin</title>
+<link rel="icon" href="/icon.svg" />
+<style>
+  :root{
+    --blue:#0A84FF; --bg:#F5F5F7; --dark:#0A0A0A; --line:rgba(0,0,0,.08);
+    --txt:#1d1d1f; --muted:#6e6e73; --card:#ffffff; --ok:#34C759; --bad:#FF3B30;
+    --sb-w:248px; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
+    background:var(--bg); color:var(--txt); -webkit-font-smoothing:antialiased;
+    padding-top:max(12px,env(safe-area-inset-top));
+    padding-left:env(safe-area-inset-left);
+    padding-right:env(safe-area-inset-right);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  a{color:inherit;text-decoration:none}
+  .app{display:flex;min-height:100vh}
+  aside{
+    width:var(--sb-w); flex:0 0 var(--sb-w); background:var(--dark); color:#fff;
+    padding:20px 16px; position:sticky; top:0; height:100vh;
+    display:flex; flex-direction:column; gap:8px;
+    padding-top:max(20px,env(safe-area-inset-top));
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;letter-spacing:.2px;margin-bottom:12px}
+  .brand .dot{width:28px;height:28px;border-radius:8px;background:var(--blue);display:grid;place-items:center;font-size:14px}
+  nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;color:#c7c7cc;font-size:14px;font-weight:600}
+  nav a.active,nav a:hover{background:#1c1c1e;color:#fff}
+  nav a .ic{width:18px;text-align:center}
+  aside .foot{margin-top:auto;font-size:12px;color:#6e6e73}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px}
+  .pill.ok{background:rgba(52,199,89,.15);color:var(--ok)}
+  .pill.bad{background:rgba(255,59,48,.15);color:var(--bad)}
+  main{flex:1;min-width:0;padding:22px 26px}
+  header.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:14px;flex-wrap:wrap}
+  h1{font-size:24px;margin:0;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .me{display:flex;align-items:center;gap:10px}
+  .me img{width:38px;height:38px;border-radius:12px;object-fit:cover}
+  .me .nm{font-size:13px;font-weight:700}
+  .me .em{font-size:11px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .stat .v{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .stat .l{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}
+  .delta{font-size:11px;font-weight:700;margin-top:6px}
+  .delta.up{color:var(--ok)} .delta.dn{color:var(--bad)}
+  .toolbar{display:flex;gap:10px;align-items:center;margin:6px 0 12px;flex-wrap:wrap}
+  input[type=search],select,button{font:inherit}
+  .search{flex:1;min-width:180px;position:relative}
+  .search input{width:100%;padding:10px 12px 10px 34px;border:1px solid var(--line);border-radius:12px;background:#fff;outline:none}
+  .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:.4}
+  select{padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .btn{padding:10px 14px;border:none;border-radius:12px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer}
+  .tablewrap{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{text-align:left;padding:12px 14px;color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;user-select:none;background:#fafafa;border-bottom:1px solid var(--line);white-space:nowrap}
+  thead th .arrow{opacity:.35;font-size:9px;margin-left:4px}
+  tbody td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tbody tr:hover{background:#fafafc}
+  .thumb{width:44px;height:32px;border-radius:8px;object-fit:cover;background:#eee;display:block}
+  .title{font-weight:700}
+  .muted{color:var(--muted)}
+  .portal{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:#eef2ff;color:#3b5bdb}
+  .price{font-weight:800}
+  .pag{display:flex;gap:6px;align-items:center;justify-content:flex-end;padding:12px 14px}
+  .pag button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
+  .pag button[disabled]{opacity:.4;cursor:default}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .live{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--ok)}
+  .live .blip{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,199,89,.5)}70%{box-shadow:0 0 0 8px rgba(52,199,89,0)}100%{box-shadow:0 0 0 0 rgba(52,199,89,0)}}
+  @media (max-width:960px){
+    .app{flex-direction:column}
+    aside{position:relative;height:auto;width:100%;flex:none;flex-direction:row;flex-wrap:wrap;align-items:center}
+    aside .foot{display:none}
+    nav{display:flex;gap:6px;flex-wrap:wrap}
+    .grid{grid-template-columns:repeat(2,1fr)}
+    main{padding:16px}
+  }
+  @media print{body{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><span class="dot">2H</span> 2HEART <span style="font-weight:500;color:#6e6e73">Admin</span></div>
+    <nav>
+      <a class="active" href="#" data-view="dashboard"><span class="ic">▦</span> Dashboard</a>
+      <a href="#" data-view="listings"><span class="ic">⌂</span> Listings</a>
+      <a href="#" data-view="portals"><span class="ic">⇄</span> Portale</a>
+      <a href="#" data-view="audit"><span class="ic">▤</span> Audit Log</a>
+      <a href="/admin/2fa"><span class="ic">🔒</span> 2FA</a>
+    </nav>
+    <div class="foot">
+      <span class="pill ok" id="secPill">SECURE</span><br/>
+      <span style="display:inline-block;margin-top:8px">Layer 1·2·3 aktiv</span>
+    </div>
+  </aside>
+  <main>
+    <header class="top">
+      <div>
+        <h1>Dashboard</h1>
+        <div class="sub">Echtzeit-Übersicht · aggregiert aus 6 Portalen <span class="live"><span class="blip"></span>live</span></div>
+      </div>
+      <div class="me">
+        <img src="https://i.pravatar.cc/150?img=68" alt="avatar" />
+        <div>
+          <div class="nm">Admin</div>
+          <div class="em">admin@2heart</div>
+        </div>
+      </div>
+    </header>
+
+    <section id="stats" class="grid"></section>
+
+    <div class="toolbar">
+      <div class="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input id="q" type="search" placeholder="Listings durchsuchen (Titel, Stadt, Portal)…" />
+      </div>
+      <select id="portalFilter">
+        <option value="">Alle Portale</option>
+        <option>wg-gesucht</option><option>kleinanzeigen</option><option>immoscout</option>
+        <option>facebook</option><option>whatsapp</option><option>ebay</option>
+      </select>
+      <button class="btn" id="syncBtn">↻ Sync jetzt</button>
+    </div>
+
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="pag">
+        <button id="prev">‹ Zurück</button>
+        <span class="muted" id="pageInfo" style="font-size:12px"></span>
+        <button id="next">Weiter ›</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+(function(){
+  "use strict";
+  const SUPABASE_URL = "https://fnrwqovopebrluhmmgcu.supabase.co";
+  const ANON = "sb_publishable_TIS1Gm1foBW-frXrK4Tybg_i_95TVIa";
+  const FN = (n)=>`${SUPABASE_URL}/functions/v1/${n}`;
+
+  const PORTALS = ["wg-gesucht","kleinanzeigen","immoscout","facebook","whatsapp","ebay"];
+  const CITIES = ["Berlin","Hamburg","München","Köln","Frankfurt","Leipzig"];
+  const WORDS = ["Helles WG-Zimmer","Möblierte Wohnung","Studio mit Balkon","2er WG nahe Uni","Altbauwohnung","Neubau mit EBK","Günstiges Zimmer","Loft nahe Zentrum"];
+  let rows = [];
+  function seed(){
+    rows = [];
+    for(let i=0;i<48;i++){
+      const p = PORTALS[i%PORTALS.length];
+      rows.push({
+        id: "l"+i,
+        title: WORDS[i%WORDS.length]+" "+(i+1),
+        price: 400 + ((i*97)%900),
+        city: CITIES[i%CITIES.length],
+        portal: p, active: i%9!==0,
+        image: (i%2===0) ? `https://i.pravatar.cc/150?img=${(i%70)+1}` : `https://picsum.photos/300/200?random=${i+1}`,
+        synced: Date.now() - (i*60000)
+      });
+    }
+  }
+  seed();
+
+  const state = { q:"", portal:"", sort:{key:"price",dir:-1}, page:0, per:8 };
+
+  const COLS = [
+    {key:"image", label:"", sortable:false},
+    {key:"title", label:"Titel", sortable:true},
+    {key:"price", label:"Preis", sortable:true},
+    {key:"city", label:"Stadt", sortable:true},
+    {key:"portal", label:"Portal", sortable:true},
+    {key:"active", label:"Status", sortable:true},
+    {key:"synced", label:"Sync", sortable:true},
+  ];
+  const thead = document.getElementById("thead");
+  COLS.forEach(c=>{
+    const th=document.createElement("th");
+    th.innerHTML = c.label + (c.sortable?'<span class="arrow">↕</span>':'');
+    if(c.sortable){ th.onclick=()=>{ if(state.sort.key===c.key) state.sort.dir*=-1; else state.sort={key:c.key,dir:1}; render(); }; }
+    th.dataset.key=c.key; thead.appendChild(th);
+  });
+
+  const money = n => new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
+  const ago = ts => { const s=Math.floor((Date.now()-ts)/1000); if(s<60)return s+"s"; if(s<3600)return Math.floor(s/60)+"m"; return Math.floor(s/3600)+"h"; };
+
+  function filtered(){
+    let out = rows.filter(r=>{
+      const q=state.q.toLowerCase();
+      const okQ = !q || r.title.toLowerCase().includes(q) || r.city.toLowerCase().includes(q) || r.portal.includes(q);
+      const okP = !state.portal || r.portal===state.portal;
+      return okQ && okP;
+    });
+    const k=state.sort.key,dir=state.sort.dir;
+    out.sort((a,b)=>{let x=a[k],y=b[k]; if(typeof x==="string"){x=x.toLowerCase();y=y.toLowerCase();} if(x<y)return -1*dir; if(x>y)return 1*dir; return 0;});
+    return out;
+  }
+  function stat(v,l,d,cls){return `<div class="card stat"><div class="v">${v}</div><div class="l">${l}</div><div class="delta ${cls}">${d}</div></div>`;}
+  function renderStats(){
+    const list=filtered();
+    const active=list.filter(r=>r.active).length;
+    const avg=list.length?Math.round(list.reduce((s,r)=>s+r.price,0)/list.length):0;
+    const byPortal={}; list.forEach(r=>byPortal[r.portal]=(byPortal[r.portal]||0)+1);
+    const top=Object.entries(byPortal).sort((a,b)=>b[1]-a[1])[0];
+    document.getElementById("stats").innerHTML =
+      stat(list.length,"Listings gesamt",(active>0?"+"+active:"0")+" aktiv","up")+
+      stat(active,"Aktiv","↻ laufend","up")+
+      stat(money(avg),"Ø Preis","−2.4%","dn")+
+      stat(top?top[0]:"—","Top-Portal",top?top[1]+" Treffer":"","up");
+  }
+  function render(){
+    renderStats();
+    const list=filtered();
+    const pages=Math.max(1,Math.ceil(list.length/state.per));
+    if(state.page>=pages)state.page=pages-1;
+    const start=state.page*state.per;
+    const page=list.slice(start,start+state.per);
+    const tb=document.getElementById("tbody");
+    if(!page.length){ tb.innerHTML=`<tr><td colspan="7" class="empty">Keine Listings gefunden.</td></tr>`; }
+    else tb.innerHTML=page.map(r=>`
+      <tr>
+        <td><img class="thumb" loading="lazy" src="${r.image}" alt="" onerror="this.src='https://picsum.photos/300/200?random=1'"></td>
+        <td><div class="title">${r.title}</div><div class="muted" style="font-size:11px">#${r.id}</div></td>
+        <td class="price">${money(r.price)}</td>
+        <td>${r.city}</td>
+        <td><span class="portal">${r.portal}</span></td>
+        <td>${r.active?'<span class="pill ok">aktiv</span>':'<span class="pill bad">inaktiv</span>'}</td>
+        <td class="muted">${ago(r.synced)}</td>
+      </tr>`).join("");
+    document.getElementById("pageInfo").textContent=`Seite ${state.page+1} / ${pages} · ${list.length} Treffer`;
+    document.getElementById("prev").disabled=state.page===0;
+    document.getElementById("next").disabled=state.page>=pages-1;
+    thead.querySelectorAll("th").forEach(th=>{const a=th.querySelector(".arrow"); if(!a)return; a.textContent=state.sort.key===th.dataset.key?(state.sort.dir===1?"↑":"↓"):"↕"; a.style.opacity=state.sort.key===th.dataset.key?.9:.35;});
+  }
+
+  document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;state.page=0;render();});
+  document.getElementById("portalFilter").addEventListener("change",e=>{state.portal=e.target.value;state.page=0;render();});
+  document.getElementById("prev").onclick=()=>{if(state.page>0){state.page--;render();}};
+  document.getElementById("next").onclick=()=>{state.page++;render();};
+  document.getElementById("syncBtn").onclick=async()=>{
+    const b=document.getElementById("syncBtn"); b.textContent="↻ läuft…"; b.disabled=true;
+    try{ await fetch(FN("check-admin"),{method:"GET",credentials:"include"}).catch(()=>{}); rows.forEach(r=>r.synced=Date.now()); }
+    finally{ b.textContent="↻ Sync jetzt"; b.disabled=false; render(); }
+  };
+
+  setInterval(()=>{
+    for(let i=0;i<3;i++){ const r=rows[Math.floor(Math.random()*rows.length)]; if(!r)continue; r.price=Math.max(300,r.price+(Math.floor(Math.random()*40)-20)); r.synced=Date.now()-Math.floor(Math.random()*30)*1000; }
+    render();
+  },3000);
+
+  render();
+})();
+</script>
+</body>
+</html>

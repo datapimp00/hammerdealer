@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["next-env.d.ts", "middleware.ts", "app/**/*.ts", "app/**/*.tsx", "next.config.mjs"],
+  "exclude": ["node_modules", "supabase"]
+}

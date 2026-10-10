@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /impressum.html
+Allow: /datenschutz.html
+Disallow: /api/
+Sitemap: /sitemap.xml
