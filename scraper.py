@@ -705,8 +705,91 @@ def ebay_browse(q, limit=100):
             continue
     return out
 
+def _finding_base() -> str:
+    """Hostname der eBay Finding-API (Produktion oder Sandbox)."""
+    env = os.environ.get("EBAY_ENV", "").strip().lower()
+    sandbox = env in ("sandbox", "test", "dev") or "SBX" in os.environ.get("EBAY_APP_ID", "").upper()
+    return "svcs.sandbox.ebay.com" if sandbox else "svcs.ebay.com"
+
+
+def _ebay_global_id() -> str:
+    """eBay-Marktplatz (Standard Deutschland). Per Env ueberschreibbar."""
+    return os.environ.get("EBAY_GLOBAL_ID", "EBAY-DE").strip() or "EBAY-DE"
+
+
+def ebay_sold_price(q, limit=30):
+    """Marktpreis aus ECHTEN VERKAUFTEN eBay-Auktionen.
+
+    Nutzt die Finding-API findCompletedItems mit SoldItemsOnly=true -> abge-
+    schlossene, tatsaechlich VERKAUFTE Artikel mit echten Endpreisen (kein
+    x-Faktor-Geraten). Die Browse-API unterstuetzt KEINE Sold-Suche, daher geht
+    das nur ueber die Finding-API (nutzt EBAY_APP_ID direkt, kein OAuth noetig).
+    Median (robust gegen Ausreisser). None wenn kein Key / keine Daten / Fehler."""
+    app, _cert = _ebay_creds()
+    if not app:
+        return None
+    try:
+        headers = {
+            "X-EBAY-SOA-SECURITY-APPNAME": app,
+            "X-EBAY-SOA-OPERATION-NAME": "findCompletedItems",
+            "X-EBAY-SOA-SERVICE-VERSION": "1.13.0",
+            "X-EBAY-SOA-RESPONSE-DATA-FORMAT": "JSON",
+            "X-EBAY-SOA-GLOBAL-ID": _ebay_global_id(),
+        }
+        params = {
+            "OPERATION-NAME": "findCompletedItems",
+            "keywords": q,
+            "sortOrder": "EndTimeSoonest",
+            "paginationInput.entriesPerPage": str(min(limit, 100)),
+            "itemFilter(0).name": "SoldItemsOnly",
+            "itemFilter(0).value": "true",
+        }
+        r = requests.get(
+            "https://" + _finding_base() + "/services/search/FindingService/v1",
+            headers=headers, params=params, timeout=15)
+        if r.status_code != 200:
+            log.info("eBay-Sold(Finding): HTTP %s %s", r.status_code, r.text[:150])
+            return None
+        data = r.json()
+    except Exception as e:
+        log.warning("eBay-Sold(Finding): %s", str(e)[:100])
+        return None
+    preise = []
+    try:
+        resp = data.get("findCompletedItemsResponse") or []
+        if not resp:
+            return None
+        for sr in (resp[0].get("searchResult") or []):
+            for it in (sr.get("item") or []):
+                try:
+                    price = (it.get("sellingStatus") or [{}])[0].get("currentPrice") or [{}]
+                    val = price[0].get("__value__") if price else None
+                    if val is None:
+                        continue
+                    p = float(val)
+                    if p > 0:
+                        preise.append(p)
+                except Exception:
+                    continue
+    except Exception:
+        return None
+    if len(preise) < 3:  # zu wenig Sold-Daten -> nicht aussagekraeftig
+        log.info("eBay-Sold(Finding): nur %d Preise", len(preise))
+        return None
+    preise.sort()
+    n = len(preise)
+    median = (preise[n // 2] if n % 2 else (preise[n // 2 - 1] + preise[n // 2]) / 2)
+    return round(median, 2)
+
+
 def ebay_market_price(q):
-    """Durchschnittspreis der eBay-Treffer als echte Marktpreis-Schaetzung."""
+    """Echte Marktpreis-Schaetzung: zuerst VERKAUFTE Auktionen (soldItems),
+    sonst Median der aktiven Listings. None wenn nichts verfuegbar."""
+    # 1) Echte verkaufte Auktionen (bevorzugt - reale Marktdaten)
+    sold = ebay_sold_price(q)
+    if sold is not None:
+        return sold
+    # 2) Fallback: Median aktiver eBay-Listings
     items = ebay_browse(q, limit=15)
     if not items:
         return None
