@@ -620,6 +620,13 @@ def scan_real(q):
 # ---------- eBay Browse API (offiziell, kostenlos) ----------
 _EBAY_TOKEN = {"token": None, "exp": 0}
 
+# Circuit-Breaker fuer die Finding-API (soldItems). eBay's WAF blockt sie von
+# Rechenzentrums-IPs hart (HTTP 418/403). Statt bei JEDEM Request erneut in den
+# 15s-Timeout zu laufen, merken wir uns den Block fuer FINDING_BLOCK_SEC und
+# liefern sofort None. Spart pro Request ~15-30s.
+_FINDING_BLOCK = {"until": 0.0}
+FINDING_BLOCK_SEC = 600  # 10 Min Sperre nach einem WAF-Block
+
 def _ebay_base() -> str:
     """Hostname der eBay-API (Produktion oder Sandbox)."""
     env = os.environ.get("EBAY_ENV", "").strip().lower()
@@ -724,9 +731,16 @@ def ebay_sold_price(q, limit=30):
     schlossene, tatsaechlich VERKAUFTE Artikel mit echten Endpreisen (kein
     x-Faktor-Geraten). Die Browse-API unterstuetzt KEINE Sold-Suche, daher geht
     das nur ueber die Finding-API (nutzt EBAY_APP_ID direkt, kein OAuth noetig).
-    Median (robust gegen Ausreisser). None wenn kein Key / keine Daten / Fehler."""
+    Median (robust gegen Ausreisser). None wenn kein Key / keine Daten / Fehler.
+
+    Circuit-Breaker: blockt eBay's WAF die Finding-API (418/403, typisch fuer
+    Rechenzentrums-IPs), liefern wir fuer FINDING_BLOCK_SEC sofort None statt
+    bei jedem Request erneut in den Timeout zu laufen."""
     app, _cert = _ebay_creds()
     if not app:
+        return None
+    # Circuit-Breaker: noch gesperrt -> sofort raus (spart ~15s Timeout)
+    if time.time() < _FINDING_BLOCK["until"]:
         return None
     try:
         headers = {
@@ -749,6 +763,9 @@ def ebay_sold_price(q, limit=30):
             headers=headers, params=params, timeout=15)
         if r.status_code != 200:
             log.info("eBay-Sold(Finding): HTTP %s %s", r.status_code, r.text[:150])
+            # WAF-Block (418/403) -> Finding-API fuer FINDING_BLOCK_SEC sperren
+            if r.status_code in (403, 418, 429):
+                _FINDING_BLOCK["until"] = time.time() + FINDING_BLOCK_SEC
             return None
         data = r.json()
     except Exception as e:
@@ -782,20 +799,41 @@ def ebay_sold_price(q, limit=30):
     return round(median, 2)
 
 
+def _query_kaskade(q):
+    """Liefert Query-Varianten von spezifisch -> breit, um echte Browse-Treffer
+    zu maximieren. Erst der volle Begriff, dann ohne letztes Wort usw. bis zum
+    ersten Wort. ['crash bandicoot trilogy', 'crash bandicoot', 'crash']."""
+    words = (q or "").split()
+    out = []
+    for i in range(len(words), 0, -1):
+        cand = " ".join(words[:i])
+        if cand not in out:
+            out.append(cand)
+    return out
+
+
 def ebay_market_price(q):
-    """Echte Marktpreis-Schaetzung: zuerst VERKAUFTE Auktionen (soldItems),
-    sonst Median der aktiven Listings. None wenn nichts verfuegbar."""
+    """Echte Marktpreis-Schaetzung. Gibt (preis, quelle_text) zurueck.
+
+    1) VERKAUFTE Auktionen (soldItems) -> echter realer Marktwert.
+       (HINWEIS: Finding-API ist von Rechenzentrums-IPs WAF-geblockt -> meist None.)
+    2) Fallback: Median der aktiven eBay-Listings (Browse-API) -> echter,
+       aber Listing-Preis (Angebot), kein Verkaufspreis. Mit Query-Kaskade:
+       findet der exakte Titel nichts, wird der Begriff verbreitert, bis echte
+       eBay-Listings kommen (maximiert echte Abdeckung statt Faktor-Geraten).
+    (preis, quelle) oder (None, None) wenn nichts verfuegbar."""
     # 1) Echte verkaufte Auktionen (bevorzugt - reale Marktdaten)
     sold = ebay_sold_price(q)
     if sold is not None:
-        return sold
-    # 2) Fallback: Median aktiver eBay-Listings
-    items = ebay_browse(q, limit=15)
-    if not items:
-        return None
-    preise = [x["preis"] for x in items]
-    if not preise:
-        return None
-    preise.sort()
-    n = len(preise)
-    return round(preise[n // 2], 2)  # Median statt Mittelwert (robust)
+        return sold, "eBay-Verkäufe (Sold-Auktionen, Median)"
+    # 2) Fallback: Median aktiver eBay-Listings (Browse-API) mit Kaskade
+    for variant in _query_kaskade(q):
+        items = ebay_browse(variant, limit=15)
+        preise = [x["preis"] for x in items if x.get("preis")]
+        if len(preise) >= 3:  # erst ab 3 echten Treffern aussagekraeftiger Median
+            preise.sort()
+            n = len(preise)
+            median = preise[n // 2] if n % 2 else (preise[n // 2 - 1] + preise[n // 2]) / 2
+            tag = "" if variant == q else f" [Verbreitert: '{variant}']"
+            return round(median, 2), "eBay-Marktpreis (aktive Listings, Median)" + tag
+    return None, None

@@ -4,10 +4,34 @@ from flask_cors import CORS
 from datetime import datetime, timedelta
 import os, requests, time, random, sqlite3, hashlib, json, re, logging, math
 from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)
 logging.basicConfig(level=logging.INFO)
+
+
+def _lade_dotenv():
+    """Laedt .env (KEY=VALUE) und setzt NUR noch nicht gesetzte Umgebungsvariablen.
+    Dependency-frei. Existierende Env-Vars (Render) haben Vorrang."""
+    try:
+        pfad = os.path.join(os.path.dirname(__file__), ".env")
+        if not os.path.exists(pfad):
+            return
+        with open(pfad) as f:
+            for zeile in f:
+                zeile = zeile.strip()
+                if not zeile or zeile.startswith("#") or "=" not in zeile:
+                    continue
+                k, v = zeile.split("=", 1)
+                k, v = k.strip(), v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception as e:
+        logging.info("dotenv: %s", str(e)[:80])
+
+
+_lade_dotenv()
 
 @app.route("/")
 def index():
@@ -25,6 +49,13 @@ _CACHE = {}
 # Per Env CACHE_TTL steuerbar (Default 60). Hoeher = mehr instant-Wiederholungen,
 # aber evtl. etwas aeltere Preise. Auf Render in der Env setzbar.
 _CACHE_TTL = int(os.environ["CACHE_TTL"]) if os.environ.get("CACHE_TTL", "").strip().isdigit() else 60
+# Pro-Artikel-Marktpreis (aus individuellem Titel, nicht ein globaler Median fuer
+# die ganze gemischte Suche). Gecacht -> schnelle Wiederholungen.
+_MARKT_CACHE = {}  # titel-key -> (zeit, (preis, quelle))
+_MARKT_TTL = int(os.environ["MARKT_TTL"]) if os.environ.get("MARKT_TTL", "").strip().isdigit() else 300
+# Wie viele unterschiedliche Artikel-Marktpreise pro Suche parallel von eBay
+# geholt werden (begrenzt die Laufzeit; Rest faellt auf globalen Preis/Faktor).
+MAX_MARKT_LOOKUPS = int(os.environ["MAX_MARKT_LOOKUPS"]) if os.environ.get("MAX_MARKT_LOOKUPS", "").strip().isdigit() else 30
 START_TIME = datetime.now()
 
 def get_db():
@@ -400,6 +431,63 @@ def fallback_bild(plattform, titel=""):
     import urllib.parse
     return "data:image/svg+xml," + urllib.parse.quote(svg)
 
+_STOPWOERTER = {
+    "inkl", "inkl.", "inklusive", "mit", "und", "fuer", "für", "von", "der",
+    "die", "das", "ein", "eine", "sehr", "top", "zustand", "neu", "ovp", "np",
+    "topzustand", "versand", "nur", "wie", "aus", "auf", "in", "im", "am",
+    "sowie", "u", "u.", "bzw", "komplett", "set", "paket", "rar", "selten",
+    "gut", "gebr", "gebraucht", "vb", "np.", "top-", "super", "echt", "org",
+    "original", "konsole", "imkl", "rechnung", "garantie",
+}
+
+
+def suchbegriff_aus_titel(titel):
+    """Zieht einen kompakten, suchbaren Begriff aus einem Artikel-Titel.
+
+    Erste sinnvolle Woerter (Zahlen/Versionen wie 'playstation 2' bleiben);
+    Stoppwoerter ('inkl', 'mit', 'Rechnung' ...) beenden den Begriff meist.
+    Rueckgabe in Kleinbuchstaben (Cache-Key-kompatibel)."""
+    if not titel:
+        return ""
+    t = re.sub(r"[()\[\]{}]", " ", str(titel).lower())
+    out = []
+    for w in re.split(r"\W+", t):
+        if not w:
+            continue
+        if w in _STOPWOERTER:
+            if out:  # Trennwort nach echtem Begriff -> Ende
+                break
+            continue
+        if len(w) < 2 and not w.isdigit():
+            continue
+        out.append(w)
+        if len(out) >= 4:
+            break
+    return " ".join(out)
+
+
+def marktpreis_artikel(begriff):
+    """Marktpreis fuer einen einzelnen Artikel-Begriff, gecacht (TTL-basiert).
+
+    Gibt (preis, quelle) zurueck oder (None, None). Thread-sicher: der Cache-
+    Eintrag wird vom Aufrufer (Hauptthread) nach dem parallelen Fetch gesetzt,
+    nicht im Worker."""
+    key = (begriff or "").strip().lower()
+    if not key:
+        return None, None
+    now = time.time()
+    hit = _MARKT_CACHE.get(key)
+    if hit and now - hit[0] < _MARKT_TTL:
+        return hit[1]
+    try:
+        from scraper import ebay_market_price
+        preis, quelle = ebay_market_price(key)
+    except Exception:
+        preis, quelle = None, None
+    _MARKT_CACHE[key] = (now, (preis, quelle))
+    return preis, quelle
+
+
 def scan(q):
     """Echte Portale scannen (Kleinanzeigen + eBay/Vinted best effort).
 
@@ -465,34 +553,55 @@ def scan(q):
     if not items:
         return []
 
-    # Echter Marktpreis aus VERKAUFTEN eBay-Auktionen (soldItems). Die Browse-API
-    # liefert abgeschlossene Verkaeufe mit echten Endpreisen -> realer Marktwert.
-    # Fallback: Median der aktiven eBay-Listings, dann Median der gescannten
-    # Angebotspreise, zuletzt x-Faktor-Schaetzung (deutlich markiert).
+    # Echter Marktpreis (globale Basis): zuerst VERKAUFTE eBay-Auktionen
+    # (soldItems), sonst Median der aktiven eBay-Listings (Browse-API).
+    # Nur EIN Aufruf (ebay_market_price prueft intern Sold->Browse), damit die
+    # geblockte Finding-API nicht doppelt den Timeout kostet.
     marktpreis = None
     markt_quelle = None
     sold_echt = False
     try:
-        from scraper import ebay_sold_price as _sold
-        sold_preis = _sold(q)
-        if sold_preis:
-            marktpreis = sold_preis
-            markt_quelle = "eBay-Verkäufe (Sold-Auktionen, Median)"
+        marktpreis, markt_quelle = ebay_market_price(q)
+        if marktpreis and "Sold" in (markt_quelle or ""):
             sold_echt = True
     except Exception:
-        marktpreis = None
-    if not marktpreis:
-        try:
-            marktpreis = ebay_market_price(q)
-            if marktpreis:
-                markt_quelle = "eBay-Marktpreis (Median)"
-        except Exception:
-            marktpreis = None
+        marktpreis, markt_quelle = None, None
     # Hinweis: KEIN Fallback auf den Median der Angebots- (Kauf-)Preise.
     # Der Median der asking prices ist bei gemischten Suchen (z.B. "playstation":
     # PS1/PS2/PS5/Spiele/Controller gemischt) als "Marktwert" irrefuehrend und
     # erzeugt falsche Gewinne. Bleibt kein echter Marktpreis, nutzen wir die
     # klar als Schaetzung markierte Faktor-Schaetzung (schaetze_verkauf).
+
+    # Pro-Artikel-Marktpreis: fuer jeden Deal wird ein spezifischer Marktpreis
+    # aus dem EIGENEN Titel bestimmt (nicht der globale Median der Mischsuche).
+    # Parallel + gecacht + auf MAX_MARKT_LOOKUPS begrenzt (Laufzeit/Rate-Limits).
+    markt_preise = {}  # index-in-items -> (preis, quelle)
+    titel_begriffe = [suchbegriff_aus_titel(it.get("titel", "")) for it in items]
+    eindeutige = []
+    for b in titel_begriffe:
+        if b and b.lower() != q.lower() and b not in eindeutige:
+            eindeutige.append(b)
+    zu_holen = eindeutige[:MAX_MARKT_LOOKUPS]
+
+    def _holen(begriff):
+        try:
+            return marktpreis_artikel(begriff)
+        except Exception:
+            return None, None
+
+    if zu_holen:
+        with ThreadPoolExecutor(max_workers=min(6, len(zu_holen))) as pool:
+            future_begriff = {pool.submit(_holen, b): b for b in zu_holen}
+            begriff_preis = {}
+            for fut in as_completed(future_begriff):
+                b = future_begriff[fut]
+                try:
+                    begriff_preis[b] = fut.result()
+                except Exception:
+                    begriff_preis[b] = (None, None)
+        for idx, begriff in enumerate(titel_begriffe):
+            if begriff in begriff_preis:
+                markt_preise[idx] = begriff_preis[begriff]
 
     quelle_txt = "echt:" + "+".join(quellen_scrape) if quellen_scrape else "wrapper"
     res = []
@@ -500,12 +609,18 @@ def scan(q):
         preis = float(it.get("kaufpreis") or it.get("preis") or 0)
         if preis <= 0:
             continue
-        # Verkaufswert: echter Marktpreis wenn plausibel (nicht unter Kaufpreis),
-        # sonst Faktor-Schaetzung als Notnagel.
-        if marktpreis and marktpreis > preis:
-            verkaufswert = marktpreis
-        else:
+        # Verkaufswert-Prioritaet: 1) pro-Artikel-Marktpreis (aus eigenem Titel),
+        # 2) globaler Marktpreis, 3) Faktor-Schaetzung (klar als Schaetzung markiert).
+        verkaufswert = None
+        verk_quelle = None
+        mp, mq = markt_preise.get(i, (None, None))
+        if mp and mp > preis:
+            verkaufswert, verk_quelle = mp, mq
+        elif marktpreis and marktpreis > preis:
+            verkaufswert, verk_quelle = marktpreis, markt_quelle
+        if verkaufswert is None:
             verkaufswert = schaetze_verkauf(preis, it.get("titel", ""))
+            verk_quelle = "Schaetzung (Faktor, kein Marktpreis)"
         d = {
             "id": f"{it.get('plattform', 'x')[:2]}_{int(time.time())}_{i}",
             "titel": it.get("titel") or q,
@@ -519,8 +634,7 @@ def scan(q):
         }
         b = berechne(d)
         if b:
-            b["verkaufswert_quelle"] = (markt_quelle if marktpreis and marktpreis > preis
-                                         else "Schaetzung (Faktor, kein Marktpreis)")
+            b["verkaufswert_quelle"] = verk_quelle
             b["quelle"] = quelle_txt
             res.append(b)
 
