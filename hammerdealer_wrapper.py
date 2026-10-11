@@ -611,12 +611,15 @@ def scan(q):
             continue
         # Verkaufswert-Prioritaet: 1) pro-Artikel-Marktpreis (aus eigenem Titel),
         # 2) globaler Marktpreis, 3) Faktor-Schaetzung (klar als Schaetzung markiert).
+        # WICHTIG: echte Marktpreise werden IMMER genutzt, auch wenn sie unter
+        # dem Kaufpreis liegen. Nur so wird ein Verlust-Deal ehrlich als Verlust
+        # erkannt, statt mit einem Faktor-Gewinn verschleiert zu werden.
         verkaufswert = None
         verk_quelle = None
         mp, mq = markt_preise.get(i, (None, None))
-        if mp and mp > preis:
+        if mp:
             verkaufswert, verk_quelle = mp, mq
-        elif marktpreis and marktpreis > preis:
+        elif marktpreis:
             verkaufswert, verk_quelle = marktpreis, markt_quelle
         if verkaufswert is None:
             verkaufswert = schaetze_verkauf(preis, it.get("titel", ""))
