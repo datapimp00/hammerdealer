@@ -48,6 +48,15 @@ a{color:var(--blue)}
 .pchip b{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;background:var(--mut)}
 .pchip .pnum{color:var(--text);font-weight:800}
 .pchip.on{border-color:currentColor;box-shadow:0 0 0 2px rgba(59,130,246,.25)}
+.suchen-leiste{display:none;flex-wrap:wrap;gap:8px;margin:-6px 0 16px;align-items:center}
+.suchen-leiste .slabel{font-size:12px;color:var(--sec);font-weight:700}
+.schip{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 6px 5px 12px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text);transition:.15s}
+.schip:hover{border-color:var(--green);transform:translateY(-1px)}
+.schip .sq{color:var(--sec);font-weight:500}
+.schip .sx{width:18px;height:18px;border-radius:50%;border:0;background:var(--card2);color:var(--sec);cursor:pointer;font-size:12px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.schip .sx:hover{background:#ef4444;color:#fff}
+.schip.sadd{color:var(--sec);border-style:dashed;padding:6px 12px}
+.schip.sadd:hover{color:var(--green);border-color:var(--green)}
 .bar{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:16px}
 .bar-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .bar-row+.bar-row{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
@@ -167,6 +176,7 @@ tr:hover td{background:rgba(59,130,246,.06)}
 </div>
 <div class='stats' id='stats'></div>
 <div class='portal-leiste' id='portalLeiste'></div>
+ <div class='suchen-leiste' id='suchenLeiste'></div>
 <div class='tbl-card' id='histCard' style='display:none;margin-bottom:16px'><div class='tbl-h'><span>📈 Gewinn-Verlauf (je 10 Min)</span><span style='font-size:11px;color:var(--sec)' id='histInfo'></span></div><div style='padding:0 16px 16px' id='histChart'></div></div>
 <div class='bar'><div class='bar-row'>
 <input type='text' id='ausschluss' list='ausschlussVorschlaege' title='Titel mit diesen Wörtern ausblenden (Komma-getrennt)' placeholder='🚫 Ausschließen: Hülle, Ersatz, defekt …' style='flex:1;min-width:170px'>
@@ -272,7 +282,8 @@ async function lade(){
  var btn=$('btnSearch');btn.disabled=true;btn.innerHTML='<span class="spin"></span> Suche';
  $('grid').innerHTML="<div class='empty'>Suche laeuft ...</div>";
  try{
-  var r=await fetch(API+'/api/deals?q='+encodeURIComponent(q)+'&min_gewinn=0&reichweite='+encodeURIComponent(rw));
+  var aus=$('ausschluss')?($('ausschluss').value||'').trim():'';
+  var r=await fetch(API+'/api/deals?q='+encodeURIComponent(q)+'&min_gewinn=0&reichweite='+encodeURIComponent(rw)+'&ausschluss='+encodeURIComponent(aus));
   if(!r.ok)throw new Error('Server '+r.status);
   var d=await r.json();
   alleDeals=(d.deals||[]).map(function(x){x._c=calc(x,opts());return x});
@@ -464,6 +475,66 @@ function teilen(id){var d=null;for(var i=0;i<alleDeals.length;i++){if(alleDeals[
  if(navigator.share){navigator.share({title:d.titel,text:t,url:d.link}).catch(function(){})} 
  else if(navigator.clipboard){navigator.clipboard.writeText(t);toast('Link kopiert')}else{prompt('Link kopieren:',t)}}
 function setChip(q){$('searchInput').value=q;lade()}
+ // ---- Gespeicherte Suchauftraege (SnipeFlip-Prinzip: Suchbegriff + Ausschluss speichern) ----
+ var suchauftraege=[];
+ function setSelect(id,val){var s=$(id);if(!s)return;val=String(val==null?'':val);if(val===''){s.value='';return}var has=false;for(var i=0;i<s.options.length;i++){if(s.options[i].value===val){has=true;break}}if(!has){var o=document.createElement('option');o.value=val;o.textContent=val;s.appendChild(o)}s.value=val}
+ async function ladeSuchauftraege(){
+  try{
+   var r=await fetch(API+'/api/suchauftraege');
+   var d=await r.json();
+   suchauftraege=d.auftraege||[];
+   renderSuchauftraege();
+  }catch(e){}
+ }
+ function renderSuchauftraege(){
+  var el=$('suchenLeiste');if(!el)return;
+  var h="<span class='slabel'>🔔 Gespeicherte Suchen:</span>";
+  h+=suchauftraege.map(function(a){
+   return "<span class='schip' onclick='suchauftragAnwenden("+a.id+")' title='Anwenden: "+esc(a.query)+(a.ausschluss?" | ohne: "+esc(a.ausschluss):"")+"'>&#128279; "+esc(a.name)+
+   (a.ausschluss?" <span class='sq'>🚫 "+esc(a.ausschluss)+"</span>":"")+
+   " <button class='sx' onclick='event.stopPropagation();suchauftragLoeschen("+a.id+")' title='Loeschen'>&times;</button></span>";
+  }).join('');
+  h+="<span class='schip sadd' onclick='suchauftragSpeichern()' title='Aktuelle Suche + Filter speichern'>&#128190; Suche speichern</span>";
+  el.innerHTML=h;
+  el.style.display='flex';
+ }
+ async function suchauftragSpeichern(){
+  var q=($('searchInput').value||'').trim();
+  if(!q){toast('Erst einen Suchbegriff eingeben');return}
+  var name=window.prompt('Name für diese gespeicherte Suche:',q);
+  if(name===null)return;name=name.trim();if(!name)name=q;
+  var body={name:name,query:q,
+   ausschluss:($('ausschluss').value||'').trim(),
+   min_gewinn:Number($('minGewinn').value)||0,
+   zustand:($('filterZustand').value||''),
+   plattform:($('filterPlattform').value||''),
+   reichweite:Number($('selReichweite')?$('selReichweite').value:50)||50};
+  try{
+   var r=await fetch(API+'/api/suchauftraege',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   var d=await r.json();
+   if(d.ok){toast('Suchauftrag „'+esc(d.name)+"“ gespeichert");ladeSuchauftraege()}
+   else toast('Fehler: '+esc(d.fehler||'?'));
+  }catch(e){toast('Fehler: '+esc(e.message||e))}
+ }
+ async function suchauftragLoeschen(id){
+  try{
+   var r=await fetch(API+'/api/suchauftraege/'+id,{method:'DELETE'});
+   var d=await r.json();
+   if(d.ok){toast('Suchauftrag gelöscht');ladeSuchauftraege()}
+   else toast('Fehler: '+esc(d.fehler||'?'));
+  }catch(e){toast('Fehler: '+esc(e.message||e))}
+ }
+ function suchauftragAnwenden(id){
+  var a=null;for(var i=0;i<suchauftraege.length;i++){if(suchauftraege[i].id===id)a=suchauftraege[i]}
+  if(!a)return;
+  if($('ausschluss'))$('ausschluss').value=a.ausschluss||'';
+  setSelect('filterPlattform',a.plattform||'');
+  setSelect('filterZustand',a.zustand||'');
+  setSelect('minGewinn',a.min_gewinn||0);
+  if($('selReichweite'))setSelect('selReichweite',a.reichweite||50);
+  $('searchInput').value=a.query||'';
+  lade();
+ }
 function renderHistory(){try{var h=JSON.parse(localStorage.getItem('hd_history')||'[]');var dl=$('suchverlauf');if(dl)dl.innerHTML=h.map(function(x){return'<option value="'+esc(x)+'">'}).join('')}catch(e){}}
 function renderAlarm(){try{var a=JSON.parse(localStorage.getItem('hd_alarm')||'null');var b=$('btnAlarm');if(b)b.textContent=a?('Deal-Alarm: '+a.q+' ab '+a.min+' Euro'):'Deal-Alarm: Aus'}catch(e){}}
 function toggleAlarm(){try{var a=JSON.parse(localStorage.getItem('hd_alarm')||'null');if(a){localStorage.removeItem('hd_alarm');toast('Deal-Alarm aus')}else{var q=($('searchInput').value||'iPhone').trim()||'iPhone';var m=prompt('Alarm bei neuem Deal - Mindestgewinn in Euro:','100');if(m===null)return;localStorage.setItem('hd_alarm',JSON.stringify({q:q,min:Number(m)||100,seen:alleDeals.length}));toast('Alarm aktiv: '+q)}renderAlarm()}catch(e){}}
@@ -504,6 +575,7 @@ function bind(){
  var sr=$('selReichweite');if(sr)sr.onchange=lade;
  var ba=$('btnAlarm');if(ba)ba.onclick=toggleAlarm;
  renderHistory();renderAlarm();
+ ladeSuchauftraege();
  $('mback').addEventListener('click',function(e){if(e.target===this)closeModal()});
  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()});
  setInterval(function(){if(scanAt){var s=$('subline');if(s)s.textContent=(stand||'')+' - '+alleDeals.length+' Deals ('+zeitSeit()+')'}},30000);

@@ -73,6 +73,7 @@ def init_db():
     conn.execute("CREATE TABLE IF NOT EXISTS gewinn_historie (id INTEGER PRIMARY KEY AUTOINCREMENT, q TEXT NOT NULL, plattform TEXT, gewinn_netto NUMERIC(10,2), kaufpreis NUMERIC(10,2), verkaufswert NUMERIC(10,2), zeit TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS lens_products (image_sha256 TEXT PRIMARY KEY, image_url TEXT, google_product_id TEXT, title TEXT, ebay_sku TEXT, link TEXT, preis REAL, created_at TEXT NOT NULL DEFAULT (datetime('now')))")
     conn.execute("CREATE TABLE IF NOT EXISTS ebay_sold_cache (query TEXT, ebay_sku TEXT, sold_price NUMERIC(10,2), datum TEXT, fetched_at TEXT NOT NULL DEFAULT (datetime('now')), source TEXT NOT NULL DEFAULT 'sold-api', PRIMARY KEY (query, ebay_sku))")
+    conn.execute("CREATE TABLE IF NOT EXISTS suchauftraege (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, query TEXT NOT NULL, ausschluss TEXT, min_gewinn REAL, zustand TEXT, plattform TEXT, reichweite INTEGER, aktiv INTEGER NOT NULL DEFAULT 1, erstellt TEXT NOT NULL DEFAULT (datetime('now')))")
     cur = conn.execute("SELECT * FROM users WHERE username='admin'")
     if not cur.fetchone():
         h = hashlib.sha256("admin123".encode()).hexdigest()
@@ -128,6 +129,18 @@ def hist_init():
                 verkaufswert NUMERIC(10,2),
                 zeit TIMESTAMP NOT NULL DEFAULT now()
             )""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS suchauftraege (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                query TEXT NOT NULL,
+                ausschluss TEXT,
+                min_gewinn NUMERIC(10,2),
+                zustand TEXT,
+                plattform TEXT,
+                reichweite INTEGER,
+                aktiv INTEGER NOT NULL DEFAULT 1,
+                erstellt TIMESTAMP NOT NULL DEFAULT now()
+            )""")
         else:
             cur.execute("""CREATE TABLE IF NOT EXISTS gewinn_historie (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,6 +150,18 @@ def hist_init():
                 kaufpreis NUMERIC(10,2),
                 verkaufswert NUMERIC(10,2),
                 zeit TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS suchauftraege (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                query TEXT NOT NULL,
+                ausschluss TEXT,
+                min_gewinn NUMERIC(10,2),
+                zustand TEXT,
+                plattform TEXT,
+                reichweite INTEGER,
+                aktiv INTEGER NOT NULL DEFAULT 1,
+                erstellt TEXT NOT NULL DEFAULT (datetime('now'))
             )""")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_hist_q ON gewinn_historie(q, zeit)")
         conn.commit()
@@ -897,6 +922,75 @@ def _cache_get(q):
     return entry[1]
 
 
+def _suchauftrag_dict(r):
+    """DB-Row -> JSON-taugliches Dict."""
+    return {"id": r[0], "name": r[1], "query": r[2], "ausschluss": r[3] or "",
+            "min_gewinn": r[4], "zustand": r[5] or "", "plattform": r[6] or "",
+            "reichweite": r[7], "aktiv": r[8], "erstellt": r[9]}
+
+
+@app.route('/api/suchauftraege', methods=['GET'])
+def api_suchauftraege_liste():
+    """Alle gespeicherten Suchaufträge (neueste zuerst)."""
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id,name,query,ausschluss,min_gewinn,zustand,plattform,reichweite,aktiv,erstellt "
+            "FROM suchauftraege ORDER BY id DESC").fetchall()
+        return jsonify({'ok': True, 'auftraege': [_suchauftrag_dict(r) for r in rows]})
+    except Exception as e:
+        logging.warning('suchauftraege list: %s', str(e)[:120])
+        return jsonify({'ok': False, 'fehler': str(e)[:120]}), 500
+
+
+@app.route('/api/suchauftraege', methods=['POST'])
+def api_suchauftraege_speichern():
+    """Neuen Suchauftrag anlegen. Pflicht: name + query. Rest optional."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        name = (data.get('name') or '').strip()[:60]
+        query = sanitize_q(data.get('query', ''))
+        if not name or not query:
+            return jsonify({'ok': False, 'fehler': 'Name und Suchbegriff nötig'}), 400
+        ausschluss = (data.get('ausschluss') or '').strip()[:300]
+        zustand = (data.get('zustand') or '').strip()[:20]
+        plattform = (data.get('plattform') or '').strip()[:30]
+        try:
+            min_g = float(data.get('min_gewinn') or 0)
+        except Exception:
+            min_g = 0
+        try:
+            rw = int(data.get('reichweite') or 50)
+        except Exception:
+            rw = 50
+        conn = get_db()
+        cur = conn.execute(
+            "INSERT INTO suchauftraege (name,query,ausschluss,min_gewinn,zustand,plattform,reichweite) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (name, query, ausschluss, min_g, zustand, plattform, rw))
+        conn.commit()
+        nid = cur.lastrowid
+        conn.close()
+        return jsonify({'ok': True, 'id': nid, 'name': name, 'query': query})
+    except Exception as e:
+        logging.warning('suchauftrag save: %s', str(e)[:120])
+        return jsonify({'ok': False, 'fehler': str(e)[:120]}), 500
+
+
+@app.route('/api/suchauftraege/<int:aid>', methods=['DELETE'])
+def api_suchauftrag_loeschen(aid):
+    """Suchauftrag löschen."""
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM suchauftraege WHERE id=?", (aid,))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'geloescht': aid})
+    except Exception as e:
+        logging.warning('suchauftrag del: %s', str(e)[:120])
+        return jsonify({'ok': False, 'fehler': str(e)[:120]}), 500
+
+
 @app.route('/api/lens', methods=['POST'])
 def api_lens():
     try:
@@ -946,6 +1040,11 @@ def api_deals():
     except: rw=50
     if rw<5: rw=5
     if rw>200: rw=200
+    # Ausschluss-Woerter (Komma-getrennt) serverseitig: Titel, die eines dieser
+    # Woerter enthalten, komplett raus. So gilt der Filter fuer gespeicherte
+    # Suchauftraege unabhaengig vom Frontend.
+    aus_raw = (request.args.get('ausschluss', '') or '')
+    aus_woerter = [w.strip().lower() for w in aus_raw.split(',') if w.strip()]
     alle = _cache_get(q)
     if alle is None:
         alle = scan(q)
@@ -955,7 +1054,10 @@ def api_deals():
     # Reichweite Filter echte Entfernung
     if rw < 100:
         gef = [d for d in gef if d["entfernung_km"] is None or d["entfernung_km"] <= rw or d["plattform"] in ["ebay", "vinted"]]
-    return jsonify({"erfolg": True, "stand": datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "anzahl": len(gef), "deals": gef, "min_profit": 100, "filter": {"min_gewinn": min_g, "reichweite": rw, "q": q}})
+    # Ausschluss serverseitig anwenden
+    if aus_woerter:
+        gef = [d for d in gef if not any(w in str(d.get("titel", "")).lower() for w in aus_woerter)]
+    return jsonify({"erfolg": True, "stand": datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "anzahl": len(gef), "deals": gef, "min_profit": 100, "filter": {"min_gewinn": min_g, "reichweite": rw, "q": q, "ausschluss": aus_woerter}})
 
 @app.route('/api/history')
 def api_history():
