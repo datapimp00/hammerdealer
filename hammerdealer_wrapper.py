@@ -499,8 +499,40 @@ def lens_match_image(img_src, fallback_title=''):
     if not titel:
         titel = img_src.split('/')[-1].replace('-', ' ').replace('_', ' ')[:40]
     google_id = None
+    gkey = os.environ.get('GEMINI_API_KEY', '').strip()
+    gmodel = os.environ.get('GEMINI_MODEL', 'gemini-3.5-flash').strip() or 'gemini-3.5-flash'
+    if gkey:
+        try:
+            if img_src.startswith('http'):
+                gimg = {"fileData": {"mimeType": "image/jpeg", "fileUri": img_src}}
+            elif img_src.startswith('data:'):
+                mt = img_src[5:img_src.find(';')] if ';' in img_src[:40] else 'image/jpeg'
+                gimg = {"inlineData": {"mimeType": mt, "data": img_src.split(',', 1)[1] if ',' in img_src else img_src}}
+            else:
+                gimg = None
+            gparts = []
+            if gimg:
+                gparts.append(gimg)
+            gparts.append({"text": "Welches Produkt siehst du auf diesem Bild? Antworte nur mit dem kurzen Produktnamen (Marke + Modell). Falls kein Bild dabei ist, antworte nur mit dem Produktnamen zum Titel: " + titel})
+            rr = requests.post(
+                'https://generativelanguage.googleapis.com/v1beta/models/' + gmodel + ':generateContent?key=' + gkey,
+                json={"contents": [{"parts": gparts}]},
+                headers={'Content-Type': 'application/json'}, timeout=25)
+            if rr.status_code == 200:
+                cands = rr.json().get('candidates') or []
+                txt = ''
+                if cands:
+                    parts = (cands[0].get('content') or {}).get('parts') or []
+                    txt = ''.join([p.get('text', '') for p in parts]).strip().split('\n')[0][:80]
+                if txt:
+                    titel = txt
+                    google_id = 'gemini:' + txt[:60]
+            else:
+                logging.warning('gemini api: HTTP %s %s', rr.status_code, rr.text[:80])
+        except Exception as e:
+            logging.warning('lens gemini: %s', str(e)[:80])
     vin = os.environ.get('LASER_VISION_URL')
-    if vin:
+    if not google_id and vin:
         try:
             rr = requests.post(vin, json={'image': img_src},
                                headers={'Content-Type': 'application/json'},
