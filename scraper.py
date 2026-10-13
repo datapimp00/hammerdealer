@@ -197,6 +197,49 @@ def hood(q, limit=30):
     return out
 
 
+def dhd24(q, limit=30):
+    """dhd24-Suche (gehoert zur markt.de-Gruppe, aber eigener Endpoint liefert
+    echte Treffer, nicht den 'aehnliche Anzeigen'-Muell). Karten heissen
+    .clsy-c-result-list-item mit Titel im <a> und echtem Link. [] bei Fehler."""
+    url = "https://www.dhd24.com/suche/" + q.replace(" ", "-")
+    r = _get(url)
+    if not r:
+        return []
+    soup = BeautifulSoup(r.text, "html.parser")
+    out = []
+    seen = set()
+    for item in soup.select(".clsy-c-result-list-item, "
+                            ".clsy-c-result-list-item__content"):
+        if len(out) >= limit:
+            break
+        try:
+            a = item.select_one("a[href]")
+            titel = (a.get_text(" ", strip=True) if a else "")
+            if not titel or not _gueltiger_titel(titel):
+                continue
+            link = (a.get("href", "") if a else "")
+            if link.startswith("/"):
+                link = "https://www.dhd24.com" + link
+            preis = _parse_preis(item.get_text(" ", strip=True))
+            if preis is None or preis <= 0:
+                continue
+            img = item.select_one("img")
+            bild = ((img.get("src") or img.get("data-src") or "") if img else "")
+            key = re.sub(r"\s+", " ", titel.lower())[:40]
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({
+                "titel": titel[:80], "preis": preis, "link": link or "https://www.dhd24.com",
+                "bild": bild, "standort": "", "zustand": _zustand(titel),
+                "plattform": "dhd24", "beschreibung": "",
+            })
+        except Exception:
+            continue
+    log.info("dhd24 '%s': %d Artikel", q, len(out))
+    return out
+
+
 def _jsonld_products(html):
     """Generischer JSON-LD-Extractor: Produkt/Angebot/ListItem -> Titel/Preis/Bild/URL."""
     out = []
@@ -624,6 +667,7 @@ def portale():
         ("kleinanzeigen", kleinanzeigen),
         ("ebay", ebay_browse),
         ("hood", hood),
+        ("dhd24", dhd24),
         ("willhaben", willhaben_scan),
         ("vinted", vinted_scan),
         ("marktde", marktde_scan),
