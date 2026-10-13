@@ -79,6 +79,27 @@ select,input[type=text]{padding:9px 12px;border-radius:10px;border:1px solid var
 .b-vb{background:#fef08a;color:#713f12}.b-ab{background:#dbeafe;color:#1e40af}
 .b-free{background:#dcfce7;color:#166534}.b-new{background:#dcfce7;color:#166534}
 .b-def{background:#fee2e2;color:#991b1b}.b-tb{background:var(--card2);color:var(--sec);border:1px solid var(--line)}
+/* Deal-Score Badge (SnipeFlip-Prinzip) */
+.sbadge{position:absolute;top:10px;left:10px;display:inline-flex;align-items:center;gap:2px;font-size:12px;font-weight:800;padding:4px 9px;border-radius:999px;background:rgba(10,10,15,.82);backdrop-filter:blur(6px);border:1.5px solid var(--line);color:var(--text);z-index:2}
+.sbadge b{font-size:13px}
+.sbadge .sb-star{color:var(--gold);font-size:10px}
+.sbadge .sb-est{color:var(--orange);font-size:10px}
+.sbadge.g{border-color:var(--green);box-shadow:0 0 0 1px rgba(34,197,94,.35)}
+.sbadge.g b{color:var(--green)}
+.sbadge.o{border-color:var(--orange)}.sbadge.o b{color:var(--orange)}
+.sbadge.x{border-color:var(--mut)}.sbadge.x b{color:var(--mut)}
+.sbadge.mini{position:static;font-size:11px;padding:2px 7px}
+/* Score-Aufschluesselung im Modal */
+.scorebox{display:flex;gap:14px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px;flex-wrap:wrap}
+.sb-left{display:flex;align-items:center;gap:10px}
+.sb-left .sbadge{position:static;font-size:20px;padding:8px 14px}.sb-left .sbadge b{font-size:22px}
+.sb-left b{display:block;font-size:14px}.sb-left small{color:var(--sec);font-size:11.5px}
+.sb-bars{flex:1;min-width:180px;display:flex;flex-direction:column;gap:6px}
+.sb-bar{display:grid;grid-template-columns:58px 1fr 42px;align-items:center;gap:8px;font-size:11px;color:var(--sec)}
+.sb-bar i{height:6px;background:var(--card);border-radius:99px;overflow:hidden;display:block}
+.sb-bar i b{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--orange));border-radius:99px}
+.sb-bar em{font-style:normal;text-align:right;color:var(--text);font-weight:700}
+.spanne{color:var(--green)!important;font-weight:700;margin-top:2px}
 .price{display:flex;align-items:baseline;gap:8px;margin-top:auto}
 .net{font-size:22px;font-weight:800;color:var(--green)}
 .net.mid{color:var(--orange)}
@@ -148,10 +169,12 @@ tr:hover td{background:rgba(59,130,246,.06)}
 <div class='portal-leiste' id='portalLeiste'></div>
 <div class='tbl-card' id='histCard' style='display:none;margin-bottom:16px'><div class='tbl-h'><span>📈 Gewinn-Verlauf (je 10 Min)</span><span style='font-size:11px;color:var(--sec)' id='histInfo'></span></div><div style='padding:0 16px 16px' id='histChart'></div></div>
 <div class='bar'><div class='bar-row'>
+<input type='text' id='ausschluss' list='ausschlussVorschlaege' title='Titel mit diesen Wörtern ausblenden (Komma-getrennt)' placeholder='🚫 Ausschließen: Hülle, Ersatz, defekt …' style='flex:1;min-width:170px'>
+<datalist id='ausschlussVorschlaege'><option value='Hülle'><option value='Case'><option value='Ersatz'><option value='Ersatzteil'><option value='defekt'><option value='kaputt'><option value='Gesuch'><option value='suche'><option value='Ladekabel'><option value='Controller'></datalist>
 <select id='filterPlattform' title='Portal'><option value=''>Alle Portale</option><option value='ebay'>eBay</option><option value='kleinanzeigen'>Kleinanzeigen</option><option value='willhaben'>willhaben</option><option value='marktde'>markt.de</option><option value='hood'>hood.de</option><option value='dhd24'>dhd24</option><option value='vinted'>Vinted</option><option value='facebook'>Facebook</option></select>
 <select id='filterZustand' title='Zustand'><option value=''>Jeder Zustand</option><option value='neu'>Neu</option><option value='gut'>Gut</option><option value='defekt'>Defekt</option></select>
 <select id='filterFlags' title='Merkmale'><option value=''>Alle Merkmale</option><option value='vb'>Nur VB</option><option value='abholung'>Nur Abholung</option><option value='versand'>Mit Versand moeglich</option></select>
-<select id='sortBy' title='Sortierung'><option value='gewinn_desc'>Gewinn absteigend</option><option value='gewinn_asc'>Gewinn aufsteigend</option><option value='roi'>Bestes ROI</option><option value='kauf_asc'>Guenstigster Kauf</option><option value='entfernung'>Naechste zuerst</option><option value='titel'>Titel A-Z</option></select>
+<select id='sortBy' title='Sortierung'><option value='score'>Bester Deal-Score</option><option value='gewinn_desc'>Gewinn absteigend</option><option value='gewinn_asc'>Gewinn aufsteigend</option><option value='roi'>Bestes ROI</option><option value='kauf_asc'>Guenstigster Kauf</option><option value='entfernung'>Naechste zuerst</option><option value='titel'>Titel A-Z</option></select>
 <select id='selReichweite' title='Reichweite'><option value='200'>Umkreis 200 km</option><option value='100'>Umkreis 100 km</option><option value='50' selected>Umkreis 50 km</option><option value='25'>Umkreis 25 km</option><option value='10'>Umkreis 10 km</option></select>
 <select id='minGewinn' title='Mindestgewinn'><option value='0'>Ab 0 Euro</option><option value='50' selected>Ab 50 Euro</option><option value='100'>Ab 100 Euro</option><option value='200'>Ab 200 Euro</option></select>
 <button class='btn ghost sm' id='btnFavOnly'>Favoriten</button>
@@ -173,7 +196,7 @@ tr:hover td{background:rgba(59,130,246,.06)}
 <button class='tab' data-t='fav'>Favoriten <span class='n' id='nFav'></span></button>
 </div>
 <div class='grid' id='grid'></div>
-<div class='tbl-card'><div class='tbl-h'><span>Alle Deals im Detail</span><span style='font-size:11px;color:var(--sec)'>Klick auf Zeile = Details</span></div><div class='tbl-w'><table><thead><tr><th></th><th>Deal</th><th>Portal</th><th>Kauf</th><th>Verkauf</th><th>Netto</th><th>ROI</th><th>Standort</th><th>Status</th></tr></thead><tbody id='tbody'></tbody></table></div></div>
+<div class='tbl-card'><div class='tbl-h'><span>Alle Deals im Detail</span><span style='font-size:11px;color:var(--sec)'>Klick auf Zeile = Details</span></div><div class='tbl-w'><table><thead><tr><th></th><th>Deal</th><th>Portal</th><th>Kauf</th><th>Verkauf</th><th>Netto</th><th>Score</th><th>ROI</th><th>Standort</th><th>Status</th></tr></thead><tbody id='tbody'></tbody></table></div></div>
 </div>
 <footer style='max-width:1400px;margin:30px auto 0;padding:18px 20px;font-size:12px;color:var(--sec);display:flex;gap:16px;flex-wrap:wrap;justify-content:center'><span>HAMMERDEALER - alle Angaben ohne Gewaehr</span><a href='/impressum.html'>Impressum</a><a href='/datenschutz.html'>Datenschutz</a><button class='btn ghost sm' id='btnAlarm'>Deal-Alarm: Aus</button></footer>
 <div class='mback' id='mback'><div class='modal' id='modal'></div></div>
@@ -221,6 +244,15 @@ function badges(d){
  else h+="<span class='badge b-tb'>"+esc(d.zustand||'gut')+"</span>";
  return h;
 }
+// Deal-Score Ring (SnipeFlip-Prinzip): gruen >=70, orange 40-69, grau <40.
+// Stern = echter eBay-Marktpreis; ohne = Schaetzung (ehrlich markiert).
+function scoreBadge(d,mini){
+ if(d.score==null)return'';
+ var c=d.score>=70?'g':(d.score>=40?'o':'x');
+ var star=(d.score_echter_marktpreis===false)?"<span class='sb-est' title='Preis geschaetzt - kein echter Marktpreis'>&#9888;</span>":"<span class='sb-star' title='Echter eBay-Marktpreis'>&#9733;</span>";
+ return"<span class='sbadge "+c+(mini?' mini':'')+"' title='Deal-Score "+(d.score)+"/100 - Rabatt "+(d.rabatt_prozent||0)+"%'><b>"+(d.score)+"</b>"+star+"</span>";
+ }
+ function sortScore(l){l.sort(function(a,b){return (b.score||-1)-(a.score||-1)})}
 function imgFail(el){el.style.display='none';var f=el.parentNode.querySelector('.imgfb');if(f)f.style.display='flex'}
 function imgHTML(d,cls){
  var s=cls==='mini'?"width:52px;height:40px":'width:100%;height:100%';
@@ -276,9 +308,19 @@ function gefiltert(){
  if(tab==='50')l=l.filter(function(x){return x._c.netto>=50&&x._c.netto<100});
  if(tab==='fav'||favOnly)l=l.filter(function(x){return favoriten.indexOf(x.id)>=0});
  l=l.filter(function(x){return x._c.netto>=mg});
+ // Ausschluss-Woerter: Titel, die eines dieser Woerter enthalten, ausblenden.
+ var ausEl=$('ausschluss'),ausTxt=ausEl?ausEl.value:'';
+ var ausWoerter=ausTxt.split(',').map(function(w){return w.trim().toLowerCase()}).filter(Boolean);
+ if(ausWoerter.length){
+  var vorAusschluss=l.length;
+  l=l.filter(function(x){var t=String(x.titel||'').toLowerCase();return !ausWoerter.some(function(w){return t.indexOf(w)>=0})});
+  var ausgeblendet=vorAusschluss-l.length;
+  if(ausgeblendet>0)toast(ausgeblendet+' durch Ausschluss ausgeblendet');
+ }
  if(sb==='gewinn_desc')l.sort(function(a,b){return b._c.netto-a._c.netto});
  else if(sb==='gewinn_asc')l.sort(function(a,b){return a._c.netto-b._c.netto});
  else if(sb==='roi')l.sort(function(a,b){return(b._c.roi||-1)-(a._c.roi||-1)});
+ else if(sb==='score')sortScore(l);
  else if(sb==='kauf_asc')l.sort(function(a,b){return a._c.kaufG-b._c.kaufG});
  else if(sb==='entfernung')l.sort(function(a,b){return(a.entfernung_km==null?9999:a.entfernung_km)-(b.entfernung_km==null?9999:b.entfernung_km)});
  else if(sb==='titel')l.sort(function(a,b){return String(a.titel).localeCompare(String(b.titel))});
@@ -354,12 +396,13 @@ function cardHTML(d,i){
  var c=d._c,fav=favoriten.indexOf(d.id)>=0;
  var maps=d.standort?"<a href='https://maps.google.com/?q="+encodeURIComponent(d.standort)+"' target='_blank' rel='noopener'>"+esc(d.standort)+"</a>":'-';
  return"<div class='deal' onclick='openModal(\""+d.id+"\")'>"+
- "<div class='deal-img'>"+imgHTML(d)+"<span class='rank"+(i<3?' gold':'')+"'>#"+(i+1)+"</span>"+
+ "<div class='deal-img'>"+imgHTML(d)+scoreBadge(d)+"<span class='rank"+(i<3?' gold':'')+"'>#"+(i+1)+"</span>"+
  "<button class='fav"+(fav?' on':'')+"' onclick='event.stopPropagation();toggleFav(\""+d.id+"\")'>"+(fav?'&#9733;':'&#9734;')+"</button></div>"+
  "<div class='deal-b'><div class='deal-t'>"+esc(d.titel)+"</div>"+
  "<div class='meta'><span class='src "+d.plattform+"'>"+srcIcon(d.plattform)+" "+srcName(d.plattform)+"</span><span>"+maps+"</span>"+(d.entfernung_km!=null?"<span>"+d.entfernung_km+" km</span>":'')+"</div>"+
  "<div class='meta'>"+badges(d)+"</div>"+
- "<div class='price'><span class='net"+(c.netto<100?' mid':'')+"'>"+eur(c.netto)+"</span><span class='calc'>Kauf "+eur(c.kaufG)+" - Verkauf "+eur(c.verk)+"</span></div>"+
+ "<div class='price'><span class='net"+(c.netto<100?' mid':'')+"'>"+eur(c.netto)+"</span>"+scoreBadge(d)+"<span class='calc'>Kauf "+eur(c.kaufG)+" - Verkauf "+eur(c.verk)+"</span></div>"+
+ (d.spanne_euro!=null?"<div class='calc'>Spanne +"+eur(d.spanne_euro)+(d.roi_prozent!=null?" | ROI "+d.roi_prozent+" %":"")+"</div>":'')+
  "<div class='calc'>"+(c.roi!=null?"ROI "+c.roi+" % - ":'')+"Stand "+esc(d.datum||'')+"</div></div>"+
  "<div class='deal-f'><a class='btn' href='"+esc(d.link||'#')+"' target='_blank' rel='noopener' onclick='event.stopPropagation()'>Ansehen</a>"+
  "<button class='btn ghost' onclick='event.stopPropagation();teilen(\""+d.id+"\")'>Teilen</button></div></div>";
@@ -371,6 +414,7 @@ function rowHTML(d){
  "<td><span class='src "+d.plattform+"'>"+srcName(d.plattform)+"</span></td>"+
  "<td>"+eur(c.kaufG)+"</td><td>"+eur(c.verk)+"</td>"+
  "<td><b style='color:"+(c.netto>=100?'var(--green)':'var(--orange)')+"'>"+eur(c.netto)+"</b></td>"+
+ "<td>"+(d.score!=null?scoreBadge(d,true):'-')+"</td>"+
  "<td>"+(c.roi!=null?c.roi+' %':'-')+"</td><td>"+esc(d.standort||'-')+"</td><td>"+(nt?esc(nt):'-')+" / "+esc(st)+"</td></tr>";
 }
 function openModal(id){
@@ -381,6 +425,12 @@ function openModal(id){
  "<div class='m-b'><h2>"+esc(d.titel)+"</h2>"+
  "<div class='meta'><span class='src "+d.plattform+"'>"+srcName(d.plattform)+"</span><span>"+esc(d.zustand||'')+"</span><span>"+esc(d.standort||'')+"</span>"+(d.entfernung_km!=null?"<span>"+d.entfernung_km+" km</span>":'')+"</div>"+
  "<div class='meta' style='margin-top:6px'>"+badges(d)+"</div>"+
+ (d.score!=null?"<div class='scorebox'><div class='sb-left'>"+scoreBadge(d)+"<div><b>Deal-Score "+(d.score)+"/100</b><small>Rabatt "+(d.rabatt_prozent||0)+"% unter Markt"+(d.spanne_euro!=null?" - Spanne "+eur(d.spanne_euro):"")+"</small></div></div>"+
+ "<div class='sb-bars'>"+
+ "<div class='sb-bar'><span>Preis</span><i><b style='width:"+Math.min(100,(d.score_teile.preis/50)*100)+"%'></b></i><em>"+(d.score_teile.preis)+"/50</em></div>"+
+ "<div class='sb-bar'><span>Zustand</span><i><b style='width:"+Math.min(100,(d.score_teile.zustand/30)*100)+"%'></b></i><em>"+(d.score_teile.zustand)+"/30</em></div>"+
+ "<div class='sb-bar'><span>Logistik</span><i><b style='width:"+Math.min(100,(d.score_teile.logistik/20)*100)+"%'></b></i><em>"+(d.score_teile.logistik)+"/20</em></div>"+
+ "</div></div>":'')+
  "<div class='kv'><span>Einkaufspreis</span><b>"+eur(d.kaufpreis)+"</b></div>"+
  "<div class='kv'><span>+ Einkauf-Versand</span><b>"+eur(e.extra.versE)+"</b></div>"+
  "<div class='kv'><span>= Wareneinsatz</span><b>"+eur(c.kaufG)+"</b></div>"+
@@ -444,6 +494,7 @@ function bind(){
  $('searchInput').addEventListener('keydown',function(e){if(e.key==='Enter')lade()});
  $('searchInput').addEventListener('input',function(){clearTimeout(deb);deb=setTimeout(lade,700)});
  $('filterPlattform').onchange=render;$('filterZustand').onchange=render;$('filterFlags').onchange=render;
+ var ausB=$('ausschluss');if(ausB){ausB.addEventListener('input',function(){clearTimeout(deb);deb=setTimeout(render,250)})}
  $('sortBy').onchange=render;$('minGewinn').onchange=lade;
  $('tVersand').onchange=render;$('tPaypal').onchange=render;$('tVerp').onchange=render;$('tVers').onchange=render;$('tMwst').onchange=render;
  var ts=document.querySelectorAll('#tabs .tab');

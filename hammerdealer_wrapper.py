@@ -413,6 +413,75 @@ def berechne(d):
         "bild": d.get("bild",""),
     }
 
+
+def score_deal(d):
+    """Deal-Score 0-100 nach SnipeFlip-Prinzip: nachrechnen, nicht raten.
+    Preis 50%, Zustand 30%, Logistik/Verkaeufer 20% - fuer jeden Deal nachvollziehbar.
+    Fehlt echter Marktpreis -> score_echter_marktpreis=False (keine erfundene Zahl).
+    Gibt None zurueck wenn Kerndaten fehlen (dann KEIN Score statt Fake)."""
+    kauf = d.get("kaufpreis_gesamt") or d.get("kaufpreis") or 0
+    markt = d.get("verkaufswert") or 0
+    if kauf <= 0 or markt <= 0:
+        return None  # ohne echte Zahlen: kein Score statt erfundener Zahl
+
+    # 1) PREIS (0-50): was der Flipper wirklich interessiert - Netto-Gewinn (absolut)
+    #    UND Kapitalrendite (ROI). Roher "Rabatt vs. Marktpreis" taugt nicht:
+    #    eBay-Marktpreise enthalten MwSt, kleinanzeigen-Preise nicht -> ~16-20%
+    #    Scheinrabatt fuer ALLES -> Score plättet bei 100. Netto+ROI diskriminiert.
+    netto = float(d.get("gewinn_netto") or 0)
+    roi = netto / kauf if kauf > 0 else 0.0  # z.B. 3.0 = 300% Rendite
+    # Netto-Anteil (0-30): ab 200 EUR Netto voll. ROI-Anteil (0-20): ab 200% voll.
+    netto_pts = min(1.0, netto / 200.0) * 30.0
+    roi_pts = min(1.0, roi / 2.0) * 20.0
+    preis_score = netto_pts + roi_pts
+
+    # 2) ZUSTAND (0-30): neu > gut > defekt, + Bonus fuer vorhandenes Bild
+    z = (d.get("zustand") or "gut").lower()
+    zustand_score = {"neu": 30.0, "gut": 22.0, "defekt": 6.0}.get(z, 18.0)
+    if d.get("bild"):
+        zustand_score = min(30.0, zustand_score + 4.0)
+
+    # 3) LOGISTIK / VERKAEUFER (0-20): nahe Abholung schlaegt Versand
+    km = d.get("entfernung_km")
+    abhol = d.get("nur_abholung")
+    if km is not None:
+        if km <= 10:
+            logistik = 20.0
+        elif km <= 30:
+            logistik = 16.0
+        elif km <= 60:
+            logistik = 12.0
+        elif km <= 150:
+            logistik = 8.0
+        else:
+            logistik = 4.0
+    elif abhol:
+        logistik = 8.0  # Abholung ohne bekannte Entfernung
+    else:
+        logistik = 12.0  # neutraler Default (kein Standort/kein Versandhinweis)
+    if d.get("plattform") in ("ebay", "vinted"):
+        logistik = max(logistik, 14.0)  # reine Versandportale: solide Logistik
+
+    score = int(max(0, min(100, round(preis_score + zustand_score + logistik))))
+    q = d.get("verkaufswert_quelle") or ""
+    echt = not ("Schaetzung" in q or "Faktor" in q)
+    # Nur Anzeige: wie weit unter Marktpreis. Wegen MwSt-Bias (eBay brutto,
+    # kleinanzeigen netto) ist das immer leicht hoch - NUR informativ, nicht im Score.
+    rabatt = max(0.0, min(1.0, (markt - kauf) / markt)) if markt > 0 else 0.0
+    return {
+        "score": score,
+        "score_teile": {"preis": round(preis_score, 1),
+                        "zustand": round(zustand_score, 1),
+                        "logistik": round(logistik, 1)},
+        "score_echter_marktpreis": echt,
+        "rabatt_prozent": round(rabatt * 100, 1),
+        # Spanne in Euro: Marktwert - Wareneinsatz (brutto, vor Abzuegen).
+        # Nachvollziehbarer "Luft nach oben"-Wert auf einen Blick.
+        "spanne_euro": round(markt - kauf, 2),
+        "roi_prozent": round(roi * 100, 1),
+    }
+
+
 def fallback_bild(plattform, titel=""):
     """Platzhalter-Bild pro Plattform (SVG data-URI, kein externer Host noetig)."""
     farben = {
@@ -798,6 +867,9 @@ def scan(q):
         if b:
             b["verkaufswert_quelle"] = verk_quelle
             b["quelle"] = quelle_txt
+            sc = score_deal(b)
+            if sc:
+                b.update(sc)  # score, score_teile, score_echter_marktpreis, rabatt_prozent
             res.append(b)
 
     # Deduplizierung
@@ -808,7 +880,9 @@ def scan(q):
         if key not in seen:
             seen.add(key)
             uniq.append(d)
-    uniq.sort(key=lambda x: x["gewinn_netto"], reverse=True)
+    # Sortierung: Deal-Score zuerst (SnipeFlip-Prinzip), Gewinn als Tiebreaker.
+    # Deals ohne Score (kein echter Marktpreis) wandern nach hinten.
+    uniq.sort(key=lambda x: (x.get("score", -1), x["gewinn_netto"]), reverse=True)
     return uniq[:50]
 
 
