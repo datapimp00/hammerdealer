@@ -105,7 +105,7 @@ tr:hover td{background:rgba(59,130,246,.06)}
 </style></head><body>
 <header class='top'><div class='top-in'>
 <div class='logo'><span class='logo-mark'>&#128296;</span><span>HAMMERDEALER<small id='subline'>laedt ...</small></span></div>
-<div class='search'><input id='searchInput' type='text' list='suchverlauf' placeholder='Wonach suchst du? z.B. PlayStation, Fahrrad, Auto …' autocomplete='off'><datalist id='suchverlauf'></datalist><button class='btn' id='btnSearch'>Suchen</button></div>
+<div class='search'><input id='searchInput' type='text' list='suchverlauf' placeholder='Wonach suchst du? z.B. PlayStation, Fahrrad, Auto …' autocomplete='off'><datalist id='suchverlauf'></datalist><button class='btn' id='btnSearch'>Suchen</button><button class='btn ghost' id='btnLens' title='Bild analysieren (Lens)' onclick='toggleLens()'>🔍 Lens</button></div>
 <div class='live'><span class='live-dot'></span><span id='liveTxt'>verbinde ...</span></div>
 </div></header>
 <div class='wrap'>
@@ -120,6 +120,23 @@ tr:hover td{background:rgba(59,130,246,.06)}
 <button class='btn ghost sm' onclick="setChip('Kamera')">📷 Kamera</button>
 <button class='btn ghost sm' onclick="setChip('Möbel')">🛋️ Möbel</button>
 <button class='btn ghost sm' onclick="setChip('Grafikkarte')">🖥️ Grafikkarte</button>
+</div>
+<div class='bar' id='lensBar' style='display:none;margin-bottom:12px'>
+<div class='bar-row'>
+<span style='font-size:12px;color:var(--sec);font-weight:700'>🔍 Lens – Bild analysieren:</span>
+<input type='text' id='lensURL' placeholder='Bild-URL einfügen, z.B. Produktfoto …' style='flex:1;min-width:180px'>
+<button class='btn sm' id='btnLensURL' onclick='lensURL()'>Analysieren</button>
+<label class='btn ghost sm' style='cursor:pointer;margin:0'>📤 Hochladen<input type='file' id='lensFile' accept='image/*' style='display:none' onchange='lensFileChosen(this)'></label>
+<button class='btn ghost sm' onclick='toggleLens()'>✕</button>
+</div>
+<div class='bar-row' id='lensResult' style='display:none;align-items:center;gap:12px'>
+<img id='lensImg' style='width:56px;height:56px;object-fit:cover;border-radius:10px;background:var(--card2)'>
+<div style='flex:1;min-width:150px'>
+<div id='lensTitel' style='font-weight:700'></div>
+<div id='lensPreis' style='color:var(--green);font-weight:800'></div>
+</div>
+<a id='lensLink' target='_blank' rel='noopener' class='btn ghost sm'>Bei eBay ansehen →</a>
+</div>
 </div>
 <div class='stats' id='stats'></div>
 <div class='tbl-card' id='histCard' style='display:none;margin-bottom:16px'><div class='tbl-h'><span>📈 Gewinn-Verlauf (je 10 Min)</span><span style='font-size:11px;color:var(--sec)' id='histInfo'></span></div><div style='padding:0 16px 16px' id='histChart'></div></div>
@@ -381,6 +398,21 @@ function exportCSV(){var l=gefiltert();if(!l.length){toast('Keine Deals');return
  var u=URL.createObjectURL(new Blob(['\ufeff'+h+b],{type:'text/csv;charset=utf-8'}));
  var a=document.createElement('a');a.href=u;a.download='hammerdealer.csv';a.click();setTimeout(function(){URL.revokeObjectURL(u)},2000)}
 var deb=null;
+function toggleLens(){var b=$('lensBar');if(!b)return;b.style.display=b.style.display==='none'?'block':'none';if(b.style.display==='block')$('lensURL').focus()}
+async function lensSend(fd,src){var bt=$('btnLensURL');if(bt)bt.disabled=true;toast('🔍 Lens analysiert Bild …');
+ try{var r=await fetch(API+'/api/lens',{method:'POST',body:fd});var d=await r.json();
+  if(!d.ok){toast('Fehler: '+(d.fehler||'unbekannt'));return}
+  var res=$('lensResult');res.style.display='flex';
+  $('lensImg').src=src||'';$('lensTitel').textContent='Erkannt: '+String(d.titel||'?');
+  $('lensPreis').textContent=d.preis?eur(d.preis)+' Marktpreis (eBay)':'kein Marktpreis gefunden';
+  var lk=$('lensLink');if(d.link&&/^https?:\/\//.test(d.link)){lk.href=d.link;lk.style.display=''}else{lk.style.display='none'}
+  toast('Produkt erkannt: '+String(d.titel||'').slice(0,40));
+ }catch(e){toast('Lens-Fehler: '+String(e).slice(0,60))}
+ if(bt)bt.disabled=false}
+function lensURL(){var u=($('lensURL')&&$('lensURL').value||'').trim();if(!u){toast('Bitte Bild-URL eingeben');return}
+ var fd=new FormData();fd.append('image',u);lensSend(fd,u)}
+function lensFileChosen(el){var f=el.files&&el.files[0];if(!f)return;var fr=new FileReader();
+ fr.onload=function(){var fd=new FormData();fd.append('image',f);lensSend(fd,fr.result);el.value=''};fr.readAsDataURL(f)}
 function bind(){
  $('btnSearch').onclick=lade;
  $('searchInput').addEventListener('keydown',function(e){if(e.key==='Enter')lade()});

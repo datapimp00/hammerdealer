@@ -496,8 +496,10 @@ def lens_match_image(img_src, fallback_title=''):
     if hat:
         return (hat['title'], hat['preis'], hat['ebay_sku'], hat['link'], True)
     titel = (fallback_title or '').strip()
+    nur_url_titel = False
     if not titel:
         titel = img_src.split('/')[-1].replace('-', ' ').replace('_', ' ')[:40]
+        nur_url_titel = True
     google_id = None
     gkey = os.environ.get('GEMINI_API_KEY', '').strip()
     gmodel = os.environ.get('GEMINI_MODEL', 'gemini-3.5-flash').strip() or 'gemini-3.5-flash'
@@ -545,20 +547,24 @@ def lens_match_image(img_src, fallback_title=''):
     preis = None
     link = ''
     sku = ''
-    from scraper import ebay_browse as _lens_eb
-    for begriff in _suchbegriff_kaskade(titel):
-        try:
-            items = _lens_eb(begriff, limit=15)
-        except Exception:
-            items = []
-        for it in items:
-            if it.get('preis') and it.get('preis') > 0:
-                preis = it['preis']
-                sku = it.get('sku') or ''
-                link = it.get('link') or ''
+    # Ohne echten Produktnamen (nur URL-Filename als Titel) NICHT raten ->
+    # lieber kein Preis als ein falscher. Suche nur wenn Gemini/Vision erkannt
+    # hat oder ein fallback_title gegeben war.
+    if google_id or not nur_url_titel:
+        from scraper import ebay_browse as _lens_eb
+        for begriff in _suchbegriff_kaskade(titel):
+            try:
+                items = _lens_eb(begriff, limit=15)
+            except Exception:
+                items = []
+            for it in items:
+                if it.get('preis') and it.get('preis') > 0:
+                    preis = it['preis']
+                    sku = it.get('sku') or ''
+                    link = it.get('link') or ''
+                    break
+            if preis:
                 break
-        if preis:
-            break
     rec = (h, img_src, google_id, titel[:80], sku, link, preis or 0)
     try:
         conn.execute("INSERT OR REPLACE INTO lens_products VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))", rec)
@@ -821,7 +827,13 @@ def _cache_get(q):
 def api_lens():
     try:
         img = request.files.get('image') or request.form.get('image', '')
-        url = img if isinstance(img, str) else (img.read() if hasattr(img, 'read') else '')
+        url = img if isinstance(img, str) else ''
+        if not url and hasattr(img, 'read'):
+            import base64 as _b64
+            raw = img.read()
+            if raw:
+                mt = (img.mimetype or 'image/jpeg').split(';')[0]
+                url = 'data:' + mt + ';base64,' + _b64.b64encode(raw).decode()
         if not url:
             return jsonify({'ok': False, 'fehler': 'kein Bild'}), 400
         r = lens_match_image(url)
