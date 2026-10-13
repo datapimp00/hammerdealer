@@ -71,6 +71,8 @@ def init_db():
     conn.execute("CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, portal TEXT, typ TEXT, nachricht TEXT, datum TEXT)")
     conn.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT)")
     conn.execute("CREATE TABLE IF NOT EXISTS gewinn_historie (id INTEGER PRIMARY KEY AUTOINCREMENT, q TEXT NOT NULL, plattform TEXT, gewinn_netto NUMERIC(10,2), kaufpreis NUMERIC(10,2), verkaufswert NUMERIC(10,2), zeit TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE TABLE IF NOT EXISTS lens_products (image_sha256 TEXT PRIMARY KEY, image_url TEXT, google_product_id TEXT, title TEXT, ebay_sku TEXT, link TEXT, preis REAL, created_at TEXT NOT NULL DEFAULT (datetime('now')))")
+    conn.execute("CREATE TABLE IF NOT EXISTS ebay_sold_cache (query TEXT, ebay_sku TEXT, sold_price NUMERIC(10,2), datum TEXT, fetched_at TEXT NOT NULL DEFAULT (datetime('now')), source TEXT NOT NULL DEFAULT 'sold-api', PRIMARY KEY (query, ebay_sku))")
     cur = conn.execute("SELECT * FROM users WHERE username='admin'")
     if not cur.fetchone():
         h = hashlib.sha256("admin123".encode()).hexdigest()
@@ -465,6 +467,125 @@ def suchbegriff_aus_titel(titel):
             break
     return " ".join(out)
 
+def _lens_bild_hash(img_src):
+    """Hash eines Bildes (URL oder base64) - fuer Deduplizierung in lens_products."""
+    try:
+        if img_src.startswith(('data:image', 'http://', 'https://')):
+            h = hashlib.sha256(img_src.encode('utf-8', 'ignore')).hexdigest()
+        else:
+            h = hashlib.sha256(img_src.encode('utf-8', 'ignore')).hexdigest()
+        return h
+    except Exception:
+        return None
+
+
+def lens_match_image(img_src, fallback_title=''):
+    """
+    google-Lens-artige Suche: Bild(e) -> Produkt -> Preis aus eBay.
+    Allowed:
+      * img_src: Bild-URL, data-URI oder Base64 (ohne Prefix)
+      * fallback_title: Titel des Produkts (falls keine Encoder verfuegbar)
+    Returns (titel, preis, ebay_sku, link, matched) or None.
+    """
+    h = _lens_bild_hash(img_src)
+    if not h:
+        return None
+    conn = get_db()
+    cur = conn.execute("SELECT * FROM lens_products WHERE image_sha256=?", (h,))
+    hat = cur.fetchone()
+    if hat:
+        return (hat['title'], hat['preis'], hat['ebay_sku'], hat['link'], True)
+    titel = (fallback_title or '').strip()
+    if not titel:
+        titel = img_src.split('/')[-1].replace('-', ' ').replace('_', ' ')[:40]
+    google_id = None
+    vin = os.environ.get('LASER_VISION_URL')
+    if vin:
+        try:
+            rr = requests.post(vin, json={'image': img_src},
+                               headers={'Content-Type': 'application/json'},
+                               timeout=10)
+            if rr.status_code == 200 and rr.json().get('product_id'):
+                google_id = rr.json()['product_id']
+                titel = rr.json().get('title') or titel
+        except Exception as e:
+            logging.warning('lens vision: %s', str(e)[:80])
+    preis = None
+    link = ''
+    sku = ''
+    from scraper import ebay_browse as _lens_eb
+    for begriff in _suchbegriff_kaskade(titel):
+        try:
+            items = _lens_eb(begriff, limit=15)
+        except Exception:
+            items = []
+        for it in items:
+            if it.get('preis') and it.get('preis') > 0:
+                preis = it['preis']
+                sku = it.get('sku') or ''
+                link = it.get('link') or ''
+                break
+        if preis:
+            break
+    rec = (h, img_src, google_id, titel[:80], sku, link, preis or 0)
+    try:
+        conn.execute("INSERT OR REPLACE INTO lens_products VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))", rec)
+        conn.commit()
+    except Exception as e:
+        logging.warning('lens insert: %s', str(e)[:60])
+    return (titel, preis or 0, sku, link, True)
+
+
+
+def _suchbegriff_kaskade(titel):
+    """Aus dem Titel einen kaskadierten Suchbegriff fuer eBay-Browse."""
+    from scraper import ebay_browse as _eb
+    words = [w for w in titel.lower().split() if len(w) >= 2]
+    out = []
+    for i in range(len(words), 0, -1):
+        cand = ' '.join(words[:i])
+        if cand not in out:
+            out.append(cand)
+    return out
+
+def ebay_sold_price_cached(q):
+    """Verkaufsteuer-Preis von eBay via FindCompletedItems (cachebasiert).
+    grave: Finding-API blockiert von Rechenzentrums-IPs (418) -> liefert None,
+    ausser die IP ist freigegeben.
+    Returns (preis, quelle) oder (None, None).
+    """
+    key = (q or '').strip().lower()
+    now = time.time()
+    hit = _MARKT_CACHE.get(key)
+    if hit and now - hit[0] < _MARKT_TTL:
+        return hit[1]
+    try:
+        conn = get_db()
+        cur = conn.execute('SELECT sold_price, datum FROM ebay_sold_cache WHERE query=? ORDER BY fetched_at DESC LIMIT 1', (q,))
+        r = cur.fetchone()
+        if r and r[0]:
+            _MARKT_CACHE[key] = (now, (r[0], 'eBay-Sold-Cache'))
+            return r[0], 'eBay-Sold-Cache'
+    except Exception:
+        pass
+    try:
+        from scraper import ebay_sold_price as _esp
+        p = _esp(q)
+        if p:
+            try:
+                conn = get_db()
+                conn.execute("INSERT OR REPLACE INTO ebay_sold_cache (query, ebay_sku, sold_price, datum, source) VALUES (?, '', ?, '', 'sold-api')", (q, p))
+                conn.commit()
+            except Exception:
+                pass
+            _MARKT_CACHE[key] = (now, (p, 'eBay-Sold'))
+            return p, 'eBay-Sold'
+    except Exception:
+        pass
+    _MARKT_CACHE[key] = (now, (None, None))
+    return None, None
+
+
 
 def marktpreis_artikel(begriff):
     """Marktpreis fuer einen einzelnen Artikel-Begriff, gecacht (TTL-basiert).
@@ -662,6 +783,38 @@ def _cache_get(q):
         _CACHE.pop(q, None)
         return None
     return entry[1]
+
+
+@app.route('/api/lens', methods=['POST'])
+def api_lens():
+    try:
+        img = request.files.get('image') or request.form.get('image', '')
+        url = img if isinstance(img, str) else (img.read() if hasattr(img, 'read') else '')
+        if not url:
+            return jsonify({'ok': False, 'fehler': 'kein Bild'}), 400
+        r = lens_match_image(url)
+        if r is None:
+            return jsonify({'ok': False, 'fehler': 'kein Ergebnis'}), 400
+        titel, preis, sku, link, matched = r
+        return jsonify({'ok': True, 'titel': titel, 'preis': preis, 'sku': sku, 'link': link, 'matched': matched})
+    except Exception as e:
+        logging.warning('lens: %s', str(e)[:100])
+        return jsonify({'ok': False, 'fehler': str(e)[:120]}), 500
+
+@app.route('/api/sold-cache')
+def api_sold_cache():
+    try:
+        q = (request.args.get('q') or '').strip()
+        if not q:
+            return jsonify({'ok': False, 'fehler': 'kein Query'}), 400
+        import sqlite3
+        conn = get_db()
+        rows = conn.execute('SELECT sold_price, datum, source FROM ebay_sold_cache WHERE query=? ORDER BY fetched_at DESC', (q,)).fetchall()
+        out = [{'preis': r[0], 'datum': r[1], 'quelle': r[2]} for r in rows]
+        return jsonify({'ok': True, 'ergebnisse': out})
+    except Exception as e:
+        logging.warning('sold-cache: %s', str(e)[:100])
+        return jsonify({'ok': False, 'fehler': str(e)[:120]}), 500
 
 
 @app.route('/api/deals')
