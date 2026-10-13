@@ -72,6 +72,10 @@ select,input[type=text]{padding:9px 12px;border-radius:10px;border:1px solid var
 @media(max-width:640px){.grid{grid-template-columns:1fr}}
 .deal{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:transform .15s;display:flex;flex-direction:column}
 .deal:hover{transform:translateY(-3px)}
+/* Gesehene Deals: abgedunkelt, damit neue sofort ins Auge springen. */
+.deal.seen{opacity:.5}
+.deal.seen:hover{opacity:.85}
+.seen-badge{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(10,10,15,.82);color:var(--mut);font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);z-index:2}
 .deal-img{position:relative;aspect-ratio:16/9;background:var(--card2);overflow:hidden}
 .deal-img img{width:100%;height:100%;object-fit:cover;display:block}
 .deal-img .noimg{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:40px;color:var(--mut)}
@@ -90,6 +94,8 @@ select,input[type=text]{padding:9px 12px;border-radius:10px;border:1px solid var
 .b-def{background:#fee2e2;color:#991b1b}.b-tb{background:var(--card2);color:var(--sec);border:1px solid var(--line)}
 /* Deal-Score Badge (SnipeFlip-Prinzip) */
 .sbadge{position:absolute;top:10px;left:10px;display:inline-flex;align-items:center;gap:2px;font-size:12px;font-weight:800;padding:4px 9px;border-radius:999px;background:rgba(10,10,15,.82);backdrop-filter:blur(6px);border:1.5px solid var(--line);color:var(--text);z-index:2}
+/* In der Meta-Zeile der Card: als Inline-Badge (nicht absolut) neben VB/Neu-Badges. */
+.meta .sbadge{position:static;margin-left:4px}
 .sbadge b{font-size:13px}
 .sbadge .sb-star{color:var(--gold);font-size:10px}
 .sbadge .sb-est{color:var(--orange);font-size:10px}
@@ -188,6 +194,8 @@ tr:hover td{background:rgba(59,130,246,.06)}
 <select id='selReichweite' title='Reichweite'><option value='200'>Umkreis 200 km</option><option value='100'>Umkreis 100 km</option><option value='50' selected>Umkreis 50 km</option><option value='25'>Umkreis 25 km</option><option value='10'>Umkreis 10 km</option></select>
 <select id='minGewinn' title='Mindestgewinn'><option value='0'>Ab 0 Euro</option><option value='50' selected>Ab 50 Euro</option><option value='100'>Ab 100 Euro</option><option value='200'>Ab 200 Euro</option></select>
 <button class='btn ghost sm' id='btnFavOnly'>Favoriten</button>
+<button class='btn ghost sm' id='btnNurNeue' title='Nur noch nicht angesehene Deals zeigen'>Nur neue</button>
+<button class='btn ghost sm' onclick='resetGesehen()' title='Alle als „gesehen“-Markierungen löschen'>Gesehen zurücksetzen</button>
 <button class='btn ghost sm' id='btnCSV'>CSV</button>
 <button class='btn ghost sm' onclick='window.print()'>Druck</button>
 </div><div class='bar-row'>
@@ -215,6 +223,16 @@ tr:hover td{background:rgba(59,130,246,.06)}
 var API=(localStorage.getItem('HAMMERDEALER_API')||'').trim()||window.location.origin;
 var alleDeals=[],tab='alle',favOnly=false,scanAt=null,stand='';
 var favoriten=[];try{favoriten=JSON.parse(localStorage.getItem('hammerdealer_favoriten')||'[]')}catch(e){favoriten=[]}
+// Gesehene Deals: Key = stabiler Link (id hat Timestamp, aendert sich pro Scan).
+var gesehen=[];try{gesehen=JSON.parse(localStorage.getItem('hammerdealer_gesehen')||'[]')}catch(e){gesehen=[]}
+var nurNeue=false;
+function gesehenKey(d){return d.link||('t:'+String(d.titel||'').toLowerCase().slice(0,60)+'|'+d.plattform)}
+function istGesehen(d){return gesehen.indexOf(gesehenKey(d))>=0}
+function markiereGesehen(d){var k=gesehenKey(d);if(gesehen.indexOf(k)<0){gesehen.push(k);
+ // Auf 2000 Eintraege begrenzen (localStorage-Quota schonen, aelteste fallen raus)
+ if(gesehen.length>2000)gesehen=gesehen.slice(-2000);
+ try{localStorage.setItem('hammerdealer_gesehen',JSON.stringify(gesehen))}catch(e){}}}
+function resetGesehen(){gesehen=[];try{localStorage.setItem('hammerdealer_gesehen','[]')}catch(e){}render()}
 var notizen={};try{notizen=JSON.parse(localStorage.getItem('hammerdealer_notizen')||'{}')}catch(e){notizen={}}
 var statusMap={};try{statusMap=JSON.parse(localStorage.getItem('hammerdealer_status')||'{}')}catch(e){statusMap={}}
 function $(id){return document.getElementById(id)}
@@ -318,6 +336,7 @@ function gefiltert(){
  if(tab==='100')l=l.filter(function(x){return x._c.netto>=100});
  if(tab==='50')l=l.filter(function(x){return x._c.netto>=50&&x._c.netto<100});
  if(tab==='fav'||favOnly)l=l.filter(function(x){return favoriten.indexOf(x.id)>=0});
+ if(nurNeue)l=l.filter(function(x){return !istGesehen(x)});
  l=l.filter(function(x){return x._c.netto>=mg});
  // Ausschluss-Woerter: Titel, die eines dieser Woerter enthalten, ausblenden.
  var ausEl=$('ausschluss'),ausTxt=ausEl?ausEl.value:'';
@@ -404,15 +423,16 @@ function render(){
  checkAlarm();
 }
 function cardHTML(d,i){
- var c=d._c,fav=favoriten.indexOf(d.id)>=0;
+ var c=d._c,fav=favoriten.indexOf(d.id)>=0,seen=istGesehen(d);
  var maps=d.standort?"<a href='https://maps.google.com/?q="+encodeURIComponent(d.standort)+"' target='_blank' rel='noopener'>"+esc(d.standort)+"</a>":'-';
- return"<div class='deal' onclick='openModal(\""+d.id+"\")'>"+
- "<div class='deal-img'>"+imgHTML(d)+scoreBadge(d)+"<span class='rank"+(i<3?' gold':'')+"'>#"+(i+1)+"</span>"+
+ return"<div class='deal"+(seen?' seen':'')+"' onclick='openModal(\""+d.id+"\")'>"+
+ "<div class='deal-img'>"+imgHTML(d)+"<span class='rank"+(i<3?' gold':'')+"'>#"+(i+1)+"</span>"+
+ (seen?"<span class='seen-badge'>Gesehen</span>":'')+
  "<button class='fav"+(fav?' on':'')+"' onclick='event.stopPropagation();toggleFav(\""+d.id+"\")'>"+(fav?'&#9733;':'&#9734;')+"</button></div>"+
  "<div class='deal-b'><div class='deal-t'>"+esc(d.titel)+"</div>"+
  "<div class='meta'><span class='src "+d.plattform+"'>"+srcIcon(d.plattform)+" "+srcName(d.plattform)+"</span><span>"+maps+"</span>"+(d.entfernung_km!=null?"<span>"+d.entfernung_km+" km</span>":'')+"</div>"+
- "<div class='meta'>"+badges(d)+"</div>"+
- "<div class='price'><span class='net"+(c.netto<100?' mid':'')+"'>"+eur(c.netto)+"</span>"+scoreBadge(d)+"<span class='calc'>Kauf "+eur(c.kaufG)+" - Verkauf "+eur(c.verk)+"</span></div>"+
+ "<div class='meta'>"+badges(d)+scoreBadge(d)+"</div>"+
+ "<div class='price'><span class='net"+(c.netto<100?' mid':'')+"'>"+eur(c.netto)+"</span><span class='calc'>Kauf "+eur(c.kaufG)+" - Verkauf "+eur(c.verk)+"</span></div>"+
  (d.spanne_euro!=null?"<div class='calc'>Spanne +"+eur(d.spanne_euro)+(d.roi_prozent!=null?" | ROI "+d.roi_prozent+" %":"")+"</div>":'')+
  "<div class='calc'>"+(c.roi!=null?"ROI "+c.roi+" % - ":'')+"Stand "+esc(d.datum||'')+"</div></div>"+
  "<div class='deal-f'><a class='btn' href='"+esc(d.link||'#')+"' target='_blank' rel='noopener' onclick='event.stopPropagation()'>Ansehen</a>"+
@@ -431,6 +451,7 @@ function rowHTML(d){
 function openModal(id){
  var d=null;for(var i=0;i<alleDeals.length;i++){if(alleDeals[i].id===id)d=alleDeals[i]}
  if(!d)return;var c=d._c,e=c.extra;
+ markiereGesehen(d);  // Detail geoeffnet = als gesehen markieren (Dimmen beim naechsten render)
  var maps=d.standort?"<a href='https://maps.google.com/?q="+encodeURIComponent(d.standort+(d.entfernung_km!=null?'':'') )+"' target='_blank' rel='noopener'>In Maps oeffnen</a>":'-';
  $('modal').innerHTML=(d.bild?"<img class='hero' src='"+d.bild+"' referrerpolicy='no-referrer' onerror='this.style.display=\\'none\\''>":'')+
  "<div class='m-b'><h2>"+esc(d.titel)+"</h2>"+
@@ -571,6 +592,7 @@ function bind(){
  var ts=document.querySelectorAll('#tabs .tab');
  for(var i=0;i<ts.length;i++){ts[i].onclick=function(){for(var j=0;j<ts.length;j++)ts[j].classList.remove('on');this.classList.add('on');tab=this.getAttribute('data-t');favOnly=false;$('btnFavOnly').textContent='Favoriten';render()}}
  $('btnFavOnly').onclick=function(){favOnly=!favOnly;this.textContent=favOnly?'★ Favoriten':'Favoriten';this.classList.toggle('on',favOnly);render()};
+  var bn=$('btnNurNeue');if(bn)bn.onclick=function(){nurNeue=!nurNeue;this.textContent=nurNeue?'✨ Nur neue':'Nur neue';this.classList.toggle('on',nurNeue);render()};
  $('btnCSV').onclick=exportCSV;
  var sr=$('selReichweite');if(sr)sr.onchange=lade;
  var ba=$('btnAlarm');if(ba)ba.onclick=toggleAlarm;
