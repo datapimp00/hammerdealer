@@ -42,6 +42,12 @@ a{color:var(--blue)}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
 .stat .v{font-size:22px;font-weight:800}
 .stat .l{font-size:11.5px;color:var(--sec);margin-top:2px}
+.portal-leiste{display:none;flex-wrap:wrap;gap:8px;margin:-6px 0 16px}
+.pchip{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;color:var(--sec);transition:.15s}
+.pchip:hover{border-color:var(--mut);transform:translateY(-1px)}
+.pchip b{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#fff;background:var(--mut)}
+.pchip .pnum{color:var(--text);font-weight:800}
+.pchip.on{border-color:currentColor;box-shadow:0 0 0 2px rgba(59,130,246,.25)}
 .bar{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:16px}
 .bar-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .bar-row+.bar-row{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
@@ -68,7 +74,7 @@ select,input[type=text]{padding:9px 12px;border-radius:10px;border:1px solid var
 .deal-t{font-size:14px;font-weight:700;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--sec)}
 .src{font-weight:800}
-.src.ebay{color:#e53238}.src.kleinanzeigen{color:#22c55e}.src.vinted{color:#14b8a6}.src.facebook{color:#3b82f6}
+.src.ebay{color:#e53238}.src.kleinanzeigen{color:#22c55e}.src.vinted{color:#14b8a6}.src.facebook{color:#3b82f6}.src.hood{color:#f59e0b}.src.dhd24{color:#8b5cf6}.src.willhaben{color:#0ea5e9}.src.marktde{color:#ec4899}
 .badge{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .b-vb{background:#fef08a;color:#713f12}.b-ab{background:#dbeafe;color:#1e40af}
 .b-free{background:#dcfce7;color:#166534}.b-new{background:#dcfce7;color:#166534}
@@ -139,9 +145,10 @@ tr:hover td{background:rgba(59,130,246,.06)}
 </div>
 </div>
 <div class='stats' id='stats'></div>
+<div class='portal-leiste' id='portalLeiste'></div>
 <div class='tbl-card' id='histCard' style='display:none;margin-bottom:16px'><div class='tbl-h'><span>📈 Gewinn-Verlauf (je 10 Min)</span><span style='font-size:11px;color:var(--sec)' id='histInfo'></span></div><div style='padding:0 16px 16px' id='histChart'></div></div>
 <div class='bar'><div class='bar-row'>
-<select id='filterPlattform' title='Portal'><option value=''>Alle Portale</option><option value='ebay'>eBay</option><option value='kleinanzeigen'>Kleinanzeigen</option><option value='vinted'>Vinted</option><option value='facebook'>Facebook</option></select>
+<select id='filterPlattform' title='Portal'><option value=''>Alle Portale</option><option value='ebay'>eBay</option><option value='kleinanzeigen'>Kleinanzeigen</option><option value='willhaben'>willhaben</option><option value='marktde'>markt.de</option><option value='hood'>hood.de</option><option value='dhd24'>dhd24</option><option value='vinted'>Vinted</option><option value='facebook'>Facebook</option></select>
 <select id='filterZustand' title='Zustand'><option value=''>Jeder Zustand</option><option value='neu'>Neu</option><option value='gut'>Gut</option><option value='defekt'>Defekt</option></select>
 <select id='filterFlags' title='Merkmale'><option value=''>Alle Merkmale</option><option value='vb'>Nur VB</option><option value='abholung'>Nur Abholung</option><option value='versand'>Mit Versand moeglich</option></select>
 <select id='sortBy' title='Sortierung'><option value='gewinn_desc'>Gewinn absteigend</option><option value='gewinn_asc'>Gewinn aufsteigend</option><option value='roi'>Bestes ROI</option><option value='kauf_asc'>Guenstigster Kauf</option><option value='entfernung'>Naechste zuerst</option><option value='titel'>Titel A-Z</option></select>
@@ -202,8 +209,8 @@ function calc(d,o){
  return{kaufG:kaufG,verk:verk,ab:ab,brutto:Math.round(brutto*100)/100,prov:prov,netto:netto,roi:roi,
  extra:{verp:verp,versi:versi,pp:pp,mwst:mwst,versV:versV,versE:versE,verkGeb:verkGeb,zahlGeb:zahlGeb,fix:fix,rueck:rueck,sich:sich}};
 }
-function srcName(p){return{ebay:'eBay',kleinanzeigen:'Kleinanzeigen',vinted:'Vinted',facebook:'Facebook'}[p]||p}
-function srcIcon(p){return{ebay:'E',kleinanzeigen:'K',vinted:'V',facebook:'f'}[p]||'? '}
+function srcName(p){return{ebay:'eBay',kleinanzeigen:'Kleinanzeigen',vinted:'Vinted',facebook:'Facebook',hood:'hood.de',dhd24:'dhd24',willhaben:'willhaben','markt.de':'markt.de',marktde:'markt.de'}[p]||p}
+function srcIcon(p){return{ebay:'E',kleinanzeigen:'K',vinted:'V',facebook:'f',hood:'h',dhd24:'d',willhaben:'w','markt.de':'m',marktde:'m'}[p]||'? '}
 function badges(d){
  var h='';
  if(d.vb)h+="<span class='badge b-vb'>VB</span>";
@@ -249,6 +256,14 @@ async function lade(){
  btn.disabled=false;btn.textContent='Suchen';
 }
 function gefiltert(){
+ function filterNachPortal(p){
+  var fp=$('filterPlattform');if(!fp)return;
+  fp.value=(fp.value===p?'':p);  // Toggle: nochmal klicken = Filter loeschen
+  var pcs=document.querySelectorAll('#portalLeiste .pchip');
+  for(var i=0;i<pcs.length;i++)pcs[i].classList.toggle('on',pcs[i].getAttribute('data-p')===fp.value);
+  render();
+  var g=$('grid');if(g)g.scrollIntoView({behavior:'smooth',block:'start'});
+ }
  var o=opts(),fp=$('filterPlattform').value,fz=$('filterZustand').value,ff=$('filterFlags').value;
  var mg=Number($('minGewinn').value)||0,sb=$('sortBy').value;
  var l=alleDeals.map(function(d){d._c=calc(d,o);return d});
@@ -319,6 +334,17 @@ function render(){
   "<div class='stat'><div class='v' style='color:var(--green)'>"+eur(top)+"</div><div class='l'>Top-Gewinn</div></div>"+
   "<div class='stat'><div class='v'>"+eur(avg)+"</div><div class='l'>Durchschnitt</div></div>"+
   "<div class='stat'><div class='v'>"+esc(zeitSeit()||'-')+"</div><div class='l'>Stand "+esc(stand||'')+"</div></div>";
+ // Pro-Portal-Verteilung (klickbar = Filter). Zeigt alle Deals (vor Filter),
+ // damit sichtbar ist, welches Portal wie viel geliefert hat.
+ var pv={};alleDeals.forEach(function(x){pv[x.plattform]=(pv[x.plattform]||0)+1});
+ var pk=Object.keys(pv).sort(function(a,b){return pv[b]-pv[a]});
+ var pc=$('portalLeiste');
+ if(pc){
+  pc.innerHTML=pk.length?pk.map(function(p){
+   return "<button class='pchip src "+p+"' data-p='"+p+"' onclick='filterNachPortal(\""+p+"\")'><b>"+srcIcon(p)+"</b> "+srcName(p)+" <span class='pnum'>"+(pv[p])+"</span></button>";
+  }).join(''):"";
+  pc.style.display=pk.length?'flex':'none';
+ }
  if(!l.length){$('grid').innerHTML="<div class='empty'>Keine Deals. Suche oder Filter anpassen.</div>"}
  else{$('grid').innerHTML=l.map(cardHTML).join('')}
  $('tbody').innerHTML=l.map(rowHTML).join('');

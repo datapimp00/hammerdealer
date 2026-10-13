@@ -470,8 +470,33 @@ def willhaben_scan(q, limit=30):
     return []
 
 
+def _ist_job_anzeige(titel):
+    """True wenn der Titel eine Stellenanzeige / Job ist (Muell fuer Deal-Suche).
+    Nur starke, eindeutige Signale - damit keine echten Produkte gefiltert werden."""
+    t = (titel or "").lower()
+    # Geschlechts-Kennzeichnung (m/w/d etc.) = quasi immer Stellenanzeige
+    if re.search(r"\bm\s*/\s*w\s*/\s*d\b", t) or re.search(r"\bw\s*/\s*m\s*/\s*d\b", t):
+        return True
+    if re.search(r"\bm,\s*w,\s*d\b", t):  # (m,w,d)
+        return True
+    job_phrasen = (
+        "stellenangebot", "stellenanzeige", "stellenanzeigen", "jobangebot",
+        "nebenjob", "minijob", "arbeitsplatz", "arbeitskräfte", "arbeitskraft",
+        "stellenmarkt", "karriere", "jobboerse", "jobs in",
+        "wird gesucht", "suchen dich", "suchen verstärkung", "verstärkung für",
+        "verstärkung unseres", "verstärkung des teams", "teamverstärkung",
+        "wir suchen", "suchen neue", "suchen mitarbeiter", "suchen verkäufer",
+        "suchen aushilfe", "stellen zu besetzen", "ab sofort gesucht",
+        "teilzeit", "vollzeit", "geringfügig", "geringfuegig", "450-euro",
+        "aushilfe", "praktikum", "azubi", "ausbildung", "lehrstelle", "duales studium",
+        "bewerbung", "initiativbewerbung", "arbeitszeiten", "einstellungslohn",
+    )
+    return any(p in t for p in job_phrasen)
+
+
 def _gueltiger_titel(titel):
-    """Filtert Muell-Titel raus: zu kurz, reine Preise/Preisart-Fragmente."""
+    """Filtert Muell-Titel raus: zu kurz, reine Preise/Preisart-Fragmente,
+    Stellenanzeigen/Jobs. Gibt True zurueck wenn der Titel ein echter Artikel ist."""
     if not titel:
         return False
     t = titel.strip()
@@ -481,6 +506,8 @@ def _gueltiger_titel(titel):
         return False
     letters = [c for c in t if c.isalpha()]
     if len(letters) < 4:
+        return False
+    if _ist_job_anzeige(t):
         return False
     return True
 
