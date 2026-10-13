@@ -144,6 +144,59 @@ def kleinanzeigen(q, limit=75, pages=3):
     return out
 
 
+def hood(q, limit=30):
+    """Hood.de-Suche. Liefert cleanes Server-HTML mit schema.org-Microdata
+    (itemprop name/price/image/url in .iProductGridItem). Sehr stabil.
+    Liefert [] wenn Portal nicht erreichbar."""
+    url = "https://www.hood.de/suche.htm?q=" + q.replace(" ", "+")
+    r = _get(url)
+    if not r:
+        return []
+    soup = BeautifulSoup(r.text, "html.parser")
+    out = []
+    seen = set()
+    for item in soup.select(".iProductGridItem, [itemtype='http://schema.org/Product']"):
+        if len(out) >= limit:
+            break
+        try:
+            titel = ""
+            gt = item.select_one(".iGridTitle")
+            if gt:
+                titel = gt.get_text(" ", strip=True)
+            if not titel:
+                img0 = item.select_one("img")
+                titel = (img0.get("alt", "").strip() if img0 else "")
+            if not titel or not _gueltiger_titel(titel):
+                continue
+            price_el = item.select_one("[itemprop='price']")
+            preis = _parse_preis((price_el.get("content") or price_el.get_text(strip=True))
+                                 if price_el else "")
+            if preis is None:
+                preis = _parse_preis(item.get_text(" ", strip=True))
+            if preis is None or preis <= 0:
+                continue
+            url_el = item.select_one("[itemprop='url']")
+            link = (url_el.get("href") or "") if url_el else ""
+            if not link:
+                link = "https://www.hood.de"
+            img = item.select_one("img[itemprop='image']")
+            bild = ((img.get("src") or "") if img else "")
+            key = re.sub(r"\s+", " ", titel.lower())[:40]
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({
+                "titel": titel[:80],
+                "preis": preis, "link": link, "bild": bild, "standort": "",
+                "zustand": _zustand(titel), "plattform": "hood",
+                "beschreibung": "",
+            })
+        except Exception:
+            continue
+    log.info("hood '%s': %d Artikel", q, len(out))
+    return out
+
+
 def _jsonld_products(html):
     """Generischer JSON-LD-Extractor: Produkt/Angebot/ListItem -> Titel/Preis/Bild/URL."""
     out = []
@@ -570,6 +623,7 @@ def portale():
     return [
         ("kleinanzeigen", kleinanzeigen),
         ("ebay", ebay_browse),
+        ("hood", hood),
         ("willhaben", willhaben_scan),
         ("vinted", vinted_scan),
         ("marktde", marktde_scan),
